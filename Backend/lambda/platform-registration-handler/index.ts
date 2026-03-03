@@ -16,21 +16,38 @@ interface PlatformRegistrationPayload {
   platformId: string;
 }
 
+interface SharingCodePayload {
+  safeWalkId: string;
+}
+
+/** sharing code must be fetched separately. */
 interface PlatformRegistrationResponse {
   success: boolean;
   data: {
     safeWalkId: string;
+  };
+}
+
+/** Response from POST /sharing-codes --> valid for 24 hours. */
+interface SharingCodeResponse {
+  success: boolean;
+  data: {
     sharingCode: string;
+    safeWalkId: string;
+    createdAt: string;
+    expiresAt: string;
   };
 }
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   console.log('Received event:', JSON.stringify(event, null, 2));
 
-  const platformDomain = process.env.PLATFORM_DOMAIN + "/register";
+  const platformBaseDomain = process.env.PLATFORM_DOMAIN;
   const platformId = process.env.VENDOR_ID;
-  const tableName = process.env.TABLE_NAME;  const apiKey = process.env.API_KEY;
-  if (!platformDomain) {
+  const tableName = process.env.TABLE_NAME;
+  const apiKey = process.env.API_KEY;
+
+  if (!platformBaseDomain) {
     console.error('PLATFORM_DOMAIN environment variable is not set');
     return {
       statusCode: 500,
@@ -66,6 +83,9 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     };
   }
 
+  const registerUrl = platformBaseDomain + '/register';
+  const sharingCodesUrl = platformBaseDomain + '/sharing-codes';
+
   // Parse the request body
   let requestBody: RegisterPlatformRequest;
   try {
@@ -95,7 +115,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     };
   }
 
-  // Check if user already has a sharingCode (idempotency)
+  let existingSafeWalkId: string | undefined;
   try {
     const existingUser = await docClient.send(
       new GetCommand({
@@ -106,84 +126,116 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       })
     );
 
-    if (existingUser.Item?.sharingCode) {
-      console.log('User already registered, returning existing sharingCode:', existingUser.Item.sharingCode);
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: 'User already registered',
-          userId: requestBody.userId,
-          sharingCode: existingUser.Item.sharingCode,
-        }),
-      };
+    if (existingUser.Item?.sharingCode && existingUser.Item?.sharingCodeExpiresAt) {
+      const expiresAt = new Date(existingUser.Item.sharingCodeExpiresAt as string);
+      if (expiresAt > new Date()) {
+        console.log('User already has a valid sharing code, returning existing:', existingUser.Item.sharingCode);
+        return {
+          statusCode: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: 'User already registered',
+            userId: requestBody.userId,
+            sharingCode: existingUser.Item.sharingCode,
+            sharingCodeExpiresAt: existingUser.Item.sharingCodeExpiresAt,
+          }),
+        };
+      }
+      console.log('Existing sharing code has expired, requesting a new one');
+      existingSafeWalkId = existingUser.Item.safeWalkId as string;
+    } else if (existingUser.Item?.safeWalkId) {
+      existingSafeWalkId = existingUser.Item.safeWalkId as string;
     }
   } catch (error) {
     console.error('Error checking existing user:', error);
-    // Continue with registration if check fails
   }
 
-  // Prepare the payload for the platform registration request
-  const payload: PlatformRegistrationPayload = {
-    platformUserId: requestBody.userId,
-    platformId: platformId
-  };
-
   try {
-    // Send registration request to platform
-    const response = await sendPlatformRequest(platformDomain, payload, apiKey) as PlatformRegistrationResponse;
-    console.log('Platform registration successful:', response);
+    let safeWalkId: string;
 
-    // Validate response structure
-    if (!response.success || !response.data) {
-      console.error('Invalid platform response: missing success field or data object');
+    if (existingSafeWalkId) {
+      safeWalkId = existingSafeWalkId;
+      console.log('Reusing existing safeWalkId:', safeWalkId);
+    } else {
+      // register the user on the platform
+      const registrationPayload: PlatformRegistrationPayload = {
+        platformUserId: requestBody.userId,
+        platformId: platformId,
+      };
+
+      const registrationResponse = await sendRequest<PlatformRegistrationResponse>(
+        registerUrl,
+        registrationPayload,
+        apiKey
+      );
+      console.log('Platform registration successful:', registrationResponse);
+
+      if (!registrationResponse.success || !registrationResponse.data?.safeWalkId) {
+        console.error('Invalid platform registration response: missing success or safeWalkId');
+        return {
+          statusCode: 502,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error: 'Invalid platform response',
+            details: 'Registration response missing required field: safeWalkId',
+          }),
+        };
+      }
+
+      safeWalkId = registrationResponse.data.safeWalkId;
+    }
+
+    // Generate a sharing code with 24 hours of validity
+    const sharingCodePayload: SharingCodePayload = { safeWalkId };
+    const sharingCodeResponse = await sendRequest<SharingCodeResponse>(
+      sharingCodesUrl,
+      sharingCodePayload,
+      apiKey
+    );
+    console.log('Sharing code generated:', sharingCodeResponse);
+
+    if (!sharingCodeResponse.success || !sharingCodeResponse.data?.sharingCode || !sharingCodeResponse.data?.expiresAt) {
+      console.error('Invalid sharing code response: missing success, sharingCode, or expiresAt');
       return {
         statusCode: 502,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           error: 'Invalid platform response',
-          details: 'Response missing success field or data object',
+          details: 'Sharing code response missing required fields: sharingCode or expiresAt',
         }),
       };
     }
 
-    if (!response.data.safeWalkId || !response.data.sharingCode) {
-      console.error('Invalid platform response: missing safeWalkId or sharingCode');
-      return {
-        statusCode: 502,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error: 'Invalid platform response',
-          details: 'Response missing required fields: safeWalkId or sharingCode',
-        }),
-      };
-    }
+    const { sharingCode, expiresAt: sharingCodeExpiresAt } = sharingCodeResponse.data;
 
-    // Store safeWalkId in DynamoDB for the user
+    // Persist safeWalkId, sharingCode, and expiry in DynamoDB
     await docClient.send(
       new UpdateCommand({
         TableName: tableName,
         Key: {
-          safeWalkAppId: requestBody.userId
+          safeWalkAppId: requestBody.userId,
         },
-        UpdateExpression: 'SET safeWalkId = :safeWalkId, sharingCode = :sharingCode, updatedAt = :updatedAt',
+        UpdateExpression:
+          'SET safeWalkId = :safeWalkId, sharingCode = :sharingCode, sharingCodeExpiresAt = :sharingCodeExpiresAt, updatedAt = :updatedAt',
         ExpressionAttributeValues: {
-          ':safeWalkId': response.data.safeWalkId,
-          ':sharingCode': response.data.sharingCode,
+          ':safeWalkId': safeWalkId,
+          ':sharingCode': sharingCode,
+          ':sharingCodeExpiresAt': sharingCodeExpiresAt,
           ':updatedAt': new Date().toISOString(),
         },
       })
     );
 
-    console.log('Successfully stored safeWalkId in database for user:', requestBody.userId);
+    console.log('Successfully stored registration data in database for user:', requestBody.userId);
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: 'Platform registration successful',
+        message: existingSafeWalkId ? 'Sharing code refreshed' : 'Platform registration successful',
         userId: requestBody.userId,
-        sharingCode: response.data.sharingCode,
+        sharingCode,
+        sharingCodeExpiresAt,
       }),
     };
   } catch (error) {
@@ -199,8 +251,8 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   }
 };
 
-async function sendPlatformRequest(domain: string, payload: PlatformRegistrationPayload, apiKey: string): Promise<PlatformRegistrationResponse> {
-  return new Promise((resolve, reject) => {
+async function sendRequest<T>(domain: string, payload: unknown, apiKey: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
     const data = JSON.stringify(payload);
 
     // Parse the domain to determine protocol and path
@@ -240,7 +292,7 @@ async function sendPlatformRequest(domain: string, payload: PlatformRegistration
 
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           try {
-            resolve(JSON.parse(responseData));
+            resolve(JSON.parse(responseData) as T);
           } catch (error) {
             reject(new Error(`Failed to parse platform response: ${responseData}`));
           }
