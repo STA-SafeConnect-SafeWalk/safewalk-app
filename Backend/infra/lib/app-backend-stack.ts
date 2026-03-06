@@ -107,7 +107,12 @@ export class AppBackendStack extends cdk.Stack {
       description: 'SafeWalk App API',
       corsPreflight: {
         allowOrigins: ['*'],
-        allowMethods: [apigateway.CorsHttpMethod.POST, apigateway.CorsHttpMethod.GET],
+        allowMethods: [
+          apigateway.CorsHttpMethod.GET,
+          apigateway.CorsHttpMethod.POST,
+          apigateway.CorsHttpMethod.PATCH,
+          apigateway.CorsHttpMethod.DELETE,
+        ],
         allowHeaders: ['Content-Type', 'Authorization'],
       },
     });
@@ -153,6 +158,26 @@ export class AppBackendStack extends cdk.Stack {
     httpApi.addRoutes({
       path: '/sharing-code/connect',
       methods: [apigateway.HttpMethod.POST],
+      integration: userLambdaIntegration,
+    });
+
+    /* Trusted Contacts Routes */
+
+    httpApi.addRoutes({
+      path: '/contacts',
+      methods: [apigateway.HttpMethod.GET],
+      integration: userLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/contacts/{contactId}',
+      methods: [apigateway.HttpMethod.PATCH],
+      integration: userLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/contacts/{contactId}',
+      methods: [apigateway.HttpMethod.DELETE],
       integration: userLambdaIntegration,
     });
     

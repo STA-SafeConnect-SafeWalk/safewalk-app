@@ -41,6 +41,49 @@ interface PlatformTrustedContactResponse {
   data?: Record<string, unknown>;
 }
 
+interface TrustedContact {
+  contactId: string;
+  safeWalkId: string;
+  displayName?: string;
+  locationSharing: boolean;
+  sosSharing: boolean;
+}
+
+interface PlatformListContactsResponse {
+  success: boolean;
+  data: {
+    contacts: TrustedContact[];
+  };
+}
+
+interface UpdateContactSettingsRequest {
+  userId: string;
+  locationSharing: boolean;
+  sosSharing: boolean;
+}
+
+interface PlatformUpdateContactPayload {
+  safeWalkId: string;
+  locationSharing: boolean;
+  sosSharing: boolean;
+}
+
+interface PlatformUpdateContactResponse {
+  success: boolean;
+  data?: Record<string, unknown>;
+}
+
+interface PlatformDeleteContactPayload {
+  safeWalkId: string;
+}
+
+interface PlatformDeleteContactResponse {
+  success: boolean;
+  data?: Record<string, unknown>;
+}
+
+type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+
 const getEnv = (name: string): string | undefined => process.env[name];
 
 const missingEnvResponse = (name: string): APIGatewayProxyResultV2 => ({
@@ -70,6 +113,15 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
 
     case 'POST /sharing-code/connect':
       return handleConnectWithCode(event, tableName);
+
+    case 'GET /contacts':
+      return handleListContacts(event, tableName);
+
+    case 'PATCH /contacts/{contactId}':
+      return handleUpdateContactSettings(event, tableName);
+
+    case 'DELETE /contacts/{contactId}':
+      return handleDeleteContact(event, tableName);
 
     default:
       return jsonResponse(404, { error: 'Route not found' });
@@ -155,8 +207,9 @@ async function handleGenerateSharingCode(
   try {
     const platformResponse = await sendRequest<PlatformSharingCodeResponse>(
       sharingCodesUrl,
-      payload,
+      'POST',
       apiKey,
+      payload,
     );
 
     if (!platformResponse.success || !platformResponse.data?.sharingCode || !platformResponse.data?.expiresAt) {
@@ -246,8 +299,9 @@ async function handleConnectWithCode(
   try {
     const platformResponse = await sendRequest<PlatformTrustedContactResponse>(
       trustedContactsUrl,
-      payload,
+      'POST',
       apiKey,
+      payload,
     );
 
     if (!platformResponse.success) {
@@ -266,33 +320,225 @@ async function handleConnectWithCode(
   }
 }
 
+async function handleListContacts(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  if (!platformBaseDomain) return missingEnvResponse('PLATFORM_DOMAIN');
+
+  const apiKey = getEnv('API_KEY');
+  if (!apiKey) return missingEnvResponse('API_KEY');
+
+  const userId = event.queryStringParameters?.userId;
+  if (!userId) return jsonResponse(400, { error: 'userId query parameter is required' });
+
+  let safeWalkId: string;
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+    if (!result.Item?.safeWalkId) {
+      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+    }
+    safeWalkId = result.Item.safeWalkId as string;
+  } catch (error) {
+    console.error('Error retrieving user:', error);
+    return jsonResponse(500, {
+      error: 'Failed to retrieve user data',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  try {
+    const contactsUrl = `${platformBaseDomain}/contacts/${encodeURIComponent(safeWalkId)}`;
+    const platformResponse = await sendRequest<PlatformListContactsResponse>(
+      contactsUrl,
+      'GET',
+      apiKey,
+    );
+
+    if (!platformResponse.success) {
+      return jsonResponse(502, { error: 'Platform rejected contacts list request' });
+    }
+
+    return jsonResponse(200, { contacts: platformResponse.data.contacts });
+  } catch (error) {
+    console.error('Error fetching contacts:', error);
+    return jsonResponse(502, {
+      error: 'Failed to fetch trusted contacts',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
+async function handleUpdateContactSettings(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  if (!platformBaseDomain) return missingEnvResponse('PLATFORM_DOMAIN');
+
+  const apiKey = getEnv('API_KEY');
+  if (!apiKey) return missingEnvResponse('API_KEY');
+
+  const contactId = event.pathParameters?.contactId;
+  if (!contactId) return jsonResponse(400, { error: 'contactId path parameter is required' });
+
+  let requestBody: UpdateContactSettingsRequest;
+  try {
+    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    requestBody = JSON.parse(event.body) as UpdateContactSettingsRequest;
+  } catch {
+    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+  }
+
+  if (!requestBody.userId || typeof requestBody.userId !== 'string') {
+    return jsonResponse(400, { error: 'userId is required and must be a string' });
+  }
+  if (typeof requestBody.locationSharing !== 'boolean') {
+    return jsonResponse(400, { error: 'locationSharing is required and must be a boolean' });
+  }
+  if (typeof requestBody.sosSharing !== 'boolean') {
+    return jsonResponse(400, { error: 'sosSharing is required and must be a boolean' });
+  }
+
+  let safeWalkId: string;
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: requestBody.userId } }),
+    );
+    if (!result.Item?.safeWalkId) {
+      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+    }
+    safeWalkId = result.Item.safeWalkId as string;
+  } catch (error) {
+    console.error('Error retrieving user:', error);
+    return jsonResponse(500, {
+      error: 'Failed to retrieve user data',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  const updateUrl = `${platformBaseDomain}/contacts/${encodeURIComponent(contactId)}`;
+  const payload: PlatformUpdateContactPayload = {
+    safeWalkId,
+    locationSharing: requestBody.locationSharing,
+    sosSharing: requestBody.sosSharing,
+  };
+
+  try {
+    const platformResponse = await sendRequest<PlatformUpdateContactResponse>(
+      updateUrl,
+      'PATCH',
+      apiKey,
+      payload,
+    );
+
+    if (!platformResponse.success) {
+      return jsonResponse(502, { error: 'Platform rejected contact settings update' });
+    }
+
+    console.log('Contact settings updated for contactId:', contactId, 'by user:', requestBody.userId);
+    return jsonResponse(200, { message: 'Contact settings updated successfully' });
+  } catch (error) {
+    console.error('Error updating contact settings:', error);
+    return jsonResponse(502, {
+      error: 'Failed to update contact settings',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
+async function handleDeleteContact(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  if (!platformBaseDomain) return missingEnvResponse('PLATFORM_DOMAIN');
+
+  const apiKey = getEnv('API_KEY');
+  if (!apiKey) return missingEnvResponse('API_KEY');
+
+  const contactId = event.pathParameters?.contactId;
+  if (!contactId) return jsonResponse(400, { error: 'contactId path parameter is required' });
+
+  const userId = event.queryStringParameters?.userId;
+  if (!userId) return jsonResponse(400, { error: 'userId query parameter is required' });
+
+  let safeWalkId: string;
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+    if (!result.Item?.safeWalkId) {
+      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+    }
+    safeWalkId = result.Item.safeWalkId as string;
+  } catch (error) {
+    console.error('Error retrieving user:', error);
+    return jsonResponse(500, {
+      error: 'Failed to retrieve user data',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  const deleteUrl = `${platformBaseDomain}/contacts/${encodeURIComponent(contactId)}`;
+
+  try {
+    const platformResponse = await sendRequest<PlatformDeleteContactResponse>(
+      deleteUrl,
+      'DELETE',
+      apiKey,
+    );
+
+    if (!platformResponse.success) {
+      return jsonResponse(502, { error: 'Platform rejected contact deletion' });
+    }
+
+    console.log('Trusted contact deleted, contactId:', contactId, 'by user:', userId);
+    return jsonResponse(200, { message: 'Trusted contact removed successfully' });
+  } catch (error) {
+    console.error('Error deleting contact:', error);
+    return jsonResponse(502, {
+      error: 'Failed to delete trusted contact',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
-// HTTP helper – mirrors the sendRequest utility in platform-registration-handler
+// HTTP helper – supports GET, POST, PATCH, DELETE to the platform
 // ---------------------------------------------------------------------------
 
-async function sendRequest<T>(url: string, payload: unknown, apiKey: string): Promise<T> {
+async function sendRequest<T>(url: string, method: HttpMethod, apiKey: string, payload?: unknown): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const data = JSON.stringify(payload);
     const parsedUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
     const isHttps = parsedUrl.protocol === 'https:';
     const httpModule = isHttps ? https : http;
+
+    const data = payload !== undefined ? JSON.stringify(payload) : undefined;
+    const headers: Record<string, string | number> = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+    };
+    if (data !== undefined) {
+      headers['Content-Length'] = Buffer.byteLength(data);
+    }
 
     const options: https.RequestOptions = {
       hostname: parsedUrl.hostname,
       port: parsedUrl.port || (isHttps ? 443 : 80),
       path: parsedUrl.pathname + parsedUrl.search,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-        'x-api-key': apiKey,
-      },
+      method,
+      headers,
     };
 
     console.log('Sending request to platform:', {
       hostname: options.hostname,
       port: options.port,
       path: options.path,
+      method,
     });
 
     const req = httpModule.request(options, (res) => {
@@ -316,7 +562,7 @@ async function sendRequest<T>(url: string, payload: unknown, apiKey: string): Pr
     req.on('error', reject);
     req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
     req.setTimeout(15000);
-    req.write(data);
+    if (data !== undefined) req.write(data);
     req.end();
   });
 }
