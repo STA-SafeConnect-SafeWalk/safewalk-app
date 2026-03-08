@@ -32,24 +32,20 @@ class _MainShellState extends State<MainShell> {
   /// Labels and icons for each tab.
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-    BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: 'Map'),
+    BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: 'Karte'),
     BottomNavigationBarItem(
       icon: Icon(Icons.contacts_outlined),
-      label: 'Contacts',
+      label: 'Kontakte',
     ),
     BottomNavigationBarItem(
       icon: Icon(Icons.settings_outlined),
-      label: 'Settings',
+      label: 'Einstellungen',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('SafeWalk'),
-      ),
       // IndexedStack keeps all children alive so tab state is preserved.
       body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
