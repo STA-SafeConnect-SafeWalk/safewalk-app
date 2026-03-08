@@ -1,12 +1,15 @@
 # User Profile Handler Lambda
 
-Lambda function for user-facing sharing code management. Handles three routes:
+Lambda function for sharing code management and trusted contacts. Handles six routes:
 
 | Route | Description |
 |---|---|
 | `GET /sharing-code` | Returns the current sharing code and its expiry timestamp |
 | `POST /sharing-code` | Generates a new sharing code via the platform and stores it |
-| `POST /sharing-code/connect` | Registers the user as a trusted contact using a friend's sharing code |
+| `POST /sharing-code/connect` | Adds a friend as a trusted contact using their sharing code |
+| `GET /contacts` | Lists all trusted contacts with their sharing settings |
+| `PATCH /contacts/{contactId}` | Updates location/SOS sharing settings for a contact |
+| `DELETE /contacts/{contactId}` | Removes a trusted contact via the platform |
 
 ## Environment Variables
 
@@ -76,6 +79,74 @@ Sends the user's `safeWalkId` and a friend's sharing code to the platform's `/tr
 }
 ```
 
+---
+
+### GET /contacts
+
+Fetches all trusted contacts for a user from the platform. Each contact includes whether SOS and location sharing are enabled.
+
+**Query Parameters**
+- `userId` (required) – the user's SafeWalk app ID
+
+**Response 200**
+```json
+{
+  "contacts": [
+    {
+      "contactId": "contact-uuid",
+      "safeWalkId": "friend-safewalk-id",
+      "displayName": "Jane Doe",
+      "locationSharing": true,
+      "sosSharing": true
+    }
+  ]
+}
+```
+
+---
+
+### PATCH /contacts/{contactId}
+
+Updates the location sharing and/or SOS sharing settings for a specific trusted contact. These settings are independent of the contact relationship itself — a contact can exist without any sharing enabled.
+
+**Path Parameters**
+- `contactId` (required) – the platform contact ID to update
+
+**Request Body**
+```json
+{
+  "userId": "user123",
+  "locationSharing": true,
+  "sosSharing": false
+}
+```
+
+**Response 200**
+```json
+{
+  "message": "Contact settings updated successfully"
+}
+```
+
+---
+
+### DELETE /contacts/{contactId}
+
+Removes a trusted contact. Forwards the deletion request to the platform.
+
+**Path Parameters**
+- `contactId` (required) – the platform contact ID to remove
+
+**Query Parameters**
+- `userId` (required) – the user's SafeWalk app ID
+
+**Response 200**
+```json
+{
+  "message": "Trusted contact removed successfully"
+}
+```
+
 ## Example Usage
 
 ```bash
@@ -91,4 +162,15 @@ curl -X POST https://your-api-gateway-url/sharing-code \
 curl -X POST https://your-api-gateway-url/sharing-code/connect \
   -H "Content-Type: application/json" \
   -d '{ "userId": "user123", "sharingCode": "XYZABC" }'
+
+# List all trusted contacts
+curl "https://your-api-gateway-url/contacts?userId=user123"
+
+# Update sharing settings for a contact
+curl -X PATCH https://your-api-gateway-url/contacts/contact-uuid \
+  -H "Content-Type: application/json" \
+  -d '{ "userId": "user123", "locationSharing": true, "sosSharing": false }'
+
+# Remove a trusted contact
+curl -X DELETE "https://your-api-gateway-url/contacts/contact-uuid?userId=user123"
 ```
