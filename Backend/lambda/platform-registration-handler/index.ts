@@ -7,10 +7,6 @@ import * as http from 'http';
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-interface RegisterPlatformRequest {
-  userId: string;
-}
-
 interface PlatformRegistrationPayload {
   platformUserId: string;
   platformId: string;
@@ -86,32 +82,14 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   const registerUrl = platformBaseDomain + '/register';
   const sharingCodesUrl = platformBaseDomain + '/sharing-codes';
 
-  // Parse the request body
-  let requestBody: RegisterPlatformRequest;
-  try {
-    if (!event.body) {
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Request body is required' }),
-      };
-    }
-    requestBody = JSON.parse(event.body);
-  } catch (error) {
-    console.error('Failed to parse request body:', error);
+  // Identify the caller via the JWT sub injected by the API Gateway JWT authorizer
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const userId = (event.requestContext as any).authorizer?.jwt?.claims?.sub as string | undefined;
+  if (!userId) {
     return {
-      statusCode: 400,
+      statusCode: 401,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Invalid JSON in request body' }),
-    };
-  }
-
-  // Validate userId
-  if (!requestBody.userId || typeof requestBody.userId !== 'string') {
-    return {
-      statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'userId is required and must be a string' }),
+      body: JSON.stringify({ error: 'Unauthorized' }),
     };
   }
 
@@ -121,7 +99,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       new GetCommand({
         TableName: tableName,
         Key: {
-          safeWalkAppId: requestBody.userId,
+          safeWalkAppId: userId,
         },
       })
     );
@@ -135,7 +113,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: 'User already registered',
-            userId: requestBody.userId,
+            userId,
             sharingCode: existingUser.Item.sharingCode,
             sharingCodeExpiresAt: existingUser.Item.sharingCodeExpiresAt,
           }),
@@ -159,7 +137,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     } else {
       // register the user on the platform
       const registrationPayload: PlatformRegistrationPayload = {
-        platformUserId: requestBody.userId,
+        platformUserId: userId,
         platformId: platformId,
       };
 
@@ -213,7 +191,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       new UpdateCommand({
         TableName: tableName,
         Key: {
-          safeWalkAppId: requestBody.userId,
+          safeWalkAppId: userId,
         },
         UpdateExpression:
           'SET safeWalkId = :safeWalkId, sharingCode = :sharingCode, sharingCodeExpiresAt = :sharingCodeExpiresAt, updatedAt = :updatedAt',
@@ -226,14 +204,14 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       })
     );
 
-    console.log('Successfully stored registration data in database for user:', requestBody.userId);
+    console.log('Successfully stored registration data in database for user:', userId);
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: existingSafeWalkId ? 'Sharing code refreshed' : 'Platform registration successful',
-        userId: requestBody.userId,
+        userId,
         sharingCode,
         sharingCodeExpiresAt,
       }),

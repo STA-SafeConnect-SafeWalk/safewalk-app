@@ -1,18 +1,13 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import * as https from 'https';
 import * as http from 'http';
 
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-interface GenerateSharingCodeRequest {
-  userId: string;
-}
-
 interface ConnectWithCodeRequest {
-  userId: string;
   sharingCode: string;
 }
 
@@ -57,7 +52,6 @@ interface PlatformListContactsResponse {
 }
 
 interface UpdateContactSettingsRequest {
-  userId: string;
   locationSharing: boolean;
   sosSharing: boolean;
 }
@@ -98,6 +92,19 @@ const jsonResponse = (statusCode: number, body: unknown): APIGatewayProxyResultV
   body: JSON.stringify(body),
 });
 
+/** Extracts the authenticated user's Cognito sub from the API Gateway JWT context. */
+const getAuthenticatedUserId = (event: APIGatewayProxyEventV2): string | undefined => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ctx = event.requestContext as any;
+  return ctx.authorizer?.jwt?.claims?.sub as string | undefined;
+};
+
+const UNAUTHORIZED_RESPONSE: APIGatewayProxyResultV2 = {
+  statusCode: 401,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ error: 'Unauthorized' }),
+};
+
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   console.log('Received event:', JSON.stringify(event, null, 2));
 
@@ -105,6 +112,9 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   if (!tableName) return missingEnvResponse('TABLE_NAME');
 
   switch (event.routeKey) {
+    case 'POST /register':
+      return handleRegister(event, tableName);
+
     case 'GET /sharing-code':
       return handleGetSharingCode(event, tableName);
 
@@ -132,10 +142,8 @@ async function handleGetSharingCode(
   event: APIGatewayProxyEventV2,
   tableName: string,
 ): Promise<APIGatewayProxyResultV2> {
-  const userId = event.queryStringParameters?.userId;
-  if (!userId) {
-    return jsonResponse(400, { error: 'userId query parameter is required' });
-  }
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
 
   try {
     const result = await docClient.send(
@@ -171,22 +179,13 @@ async function handleGenerateSharingCode(
   const apiKey = getEnv('API_KEY');
   if (!apiKey) return missingEnvResponse('API_KEY');
 
-  let requestBody: GenerateSharingCodeRequest;
-  try {
-    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
-    requestBody = JSON.parse(event.body) as GenerateSharingCodeRequest;
-  } catch {
-    return jsonResponse(400, { error: 'Invalid JSON in request body' });
-  }
-
-  if (!requestBody.userId || typeof requestBody.userId !== 'string') {
-    return jsonResponse(400, { error: 'userId is required and must be a string' });
-  }
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
 
   let safeWalkId: string;
   try {
     const result = await docClient.send(
-      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: requestBody.userId } }),
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
 
     if (!result.Item?.safeWalkId) {
@@ -225,7 +224,7 @@ async function handleGenerateSharingCode(
     await docClient.send(
       new UpdateCommand({
         TableName: tableName,
-        Key: { safeWalkAppId: requestBody.userId },
+        Key: { safeWalkAppId: userId },
         UpdateExpression:
           'SET sharingCode = :sharingCode, sharingCodeExpiresAt = :sharingCodeExpiresAt, updatedAt = :updatedAt',
         ExpressionAttributeValues: {
@@ -236,7 +235,7 @@ async function handleGenerateSharingCode(
       }),
     );
 
-    console.log('Sharing code generated and stored for user:', requestBody.userId);
+    console.log('Sharing code generated and stored for user:', userId);
     return jsonResponse(200, { sharingCode, sharingCodeExpiresAt });
   } catch (error) {
     console.error('Error generating sharing code:', error);
@@ -257,6 +256,9 @@ async function handleConnectWithCode(
   const apiKey = getEnv('API_KEY');
   if (!apiKey) return missingEnvResponse('API_KEY');
 
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
   let requestBody: ConnectWithCodeRequest;
   try {
     if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
@@ -265,9 +267,6 @@ async function handleConnectWithCode(
     return jsonResponse(400, { error: 'Invalid JSON in request body' });
   }
 
-  if (!requestBody.userId || typeof requestBody.userId !== 'string') {
-    return jsonResponse(400, { error: 'userId is required and must be a string' });
-  }
   if (!requestBody.sharingCode || typeof requestBody.sharingCode !== 'string') {
     return jsonResponse(400, { error: 'sharingCode is required and must be a string' });
   }
@@ -275,7 +274,7 @@ async function handleConnectWithCode(
   let safeWalkId: string;
   try {
     const result = await docClient.send(
-      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: requestBody.userId } }),
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
 
     if (!result.Item?.safeWalkId) {
@@ -309,7 +308,7 @@ async function handleConnectWithCode(
       return jsonResponse(502, { error: 'Platform rejected trusted contact registration' });
     }
 
-    console.log('Successfully registered as trusted contact for user:', requestBody.userId);
+    console.log('Successfully registered as trusted contact for user:', userId);
     return jsonResponse(200, { message: 'Successfully connected as trusted contact' });
   } catch (error) {
     console.error('Error registering as trusted contact:', error);
@@ -330,8 +329,8 @@ async function handleListContacts(
   const apiKey = getEnv('API_KEY');
   if (!apiKey) return missingEnvResponse('API_KEY');
 
-  const userId = event.queryStringParameters?.userId;
-  if (!userId) return jsonResponse(400, { error: 'userId query parameter is required' });
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
 
   let safeWalkId: string;
   try {
@@ -385,6 +384,9 @@ async function handleUpdateContactSettings(
   const contactId = event.pathParameters?.contactId;
   if (!contactId) return jsonResponse(400, { error: 'contactId path parameter is required' });
 
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
   let requestBody: UpdateContactSettingsRequest;
   try {
     if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
@@ -393,9 +395,6 @@ async function handleUpdateContactSettings(
     return jsonResponse(400, { error: 'Invalid JSON in request body' });
   }
 
-  if (!requestBody.userId || typeof requestBody.userId !== 'string') {
-    return jsonResponse(400, { error: 'userId is required and must be a string' });
-  }
   if (typeof requestBody.locationSharing !== 'boolean') {
     return jsonResponse(400, { error: 'locationSharing is required and must be a boolean' });
   }
@@ -406,7 +405,7 @@ async function handleUpdateContactSettings(
   let safeWalkId: string;
   try {
     const result = await docClient.send(
-      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: requestBody.userId } }),
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
     if (!result.Item?.safeWalkId) {
       return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
@@ -439,7 +438,7 @@ async function handleUpdateContactSettings(
       return jsonResponse(502, { error: 'Platform rejected contact settings update' });
     }
 
-    console.log('Contact settings updated for contactId:', contactId, 'by user:', requestBody.userId);
+    console.log('Contact settings updated for contactId:', contactId, 'by user:', userId);
     return jsonResponse(200, { message: 'Contact settings updated successfully' });
   } catch (error) {
     console.error('Error updating contact settings:', error);
@@ -463,8 +462,8 @@ async function handleDeleteContact(
   const contactId = event.pathParameters?.contactId;
   if (!contactId) return jsonResponse(400, { error: 'contactId path parameter is required' });
 
-  const userId = event.queryStringParameters?.userId;
-  if (!userId) return jsonResponse(400, { error: 'userId query parameter is required' });
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
 
   let safeWalkId: string;
   try {
@@ -502,6 +501,72 @@ async function handleDeleteContact(
     console.error('Error deleting contact:', error);
     return jsonResponse(502, {
       error: 'Failed to delete trusted contact',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Handler: POST /register  –  create the DynamoDB user profile after first sign-in
+// ---------------------------------------------------------------------------
+
+async function handleRegister(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  // email is available in Cognito id token claims
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const email = (event.requestContext as any).authorizer?.jwt?.claims?.email as string | undefined;
+
+  // Optional display name supplied in the body
+  let displayName: string | undefined;
+  if (event.body) {
+    try {
+      const body = JSON.parse(event.body) as { displayName?: string };
+      if (typeof body.displayName === 'string') displayName = body.displayName;
+    } catch {
+      // body is optional – ignore parse errors
+    }
+  }
+
+  try {
+    const existing = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+
+    if (existing.Item) {
+      console.log('User profile already exists:', userId);
+      return jsonResponse(200, { message: 'User profile already exists', userId });
+    }
+
+    const now = new Date().toISOString();
+    await docClient.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: {
+          safeWalkAppId: userId,
+          email: email ?? null,
+          displayName: displayName ?? null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        // Guard against a race condition between the read and the write
+        ConditionExpression: 'attribute_not_exists(safeWalkAppId)',
+      }),
+    );
+
+    console.log('User profile created:', userId);
+    return jsonResponse(201, { message: 'User profile created', userId });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'ConditionalCheckFailedException') {
+      return jsonResponse(200, { message: 'User profile already exists', userId });
+    }
+    console.error('Error creating user profile:', error);
+    return jsonResponse(500, {
+      error: 'Failed to create user profile',
       details: error instanceof Error ? error.message : 'Unknown error',
     });
   }

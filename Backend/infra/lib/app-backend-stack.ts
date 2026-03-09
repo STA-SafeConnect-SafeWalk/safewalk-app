@@ -1,8 +1,11 @@
 import * as cdk from 'aws-cdk-lib/core';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as apigateway from 'aws-cdk-lib/aws-apigatewayv2';
+import * as apigatewayAuthorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as apigatewayIntegrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { Construct } from 'constructs';
 import * as path from 'path';
@@ -19,13 +22,6 @@ export class AppBackendStack extends cdk.Stack {
         throw new Error(`Missing required env var: ${name}`);
       }
     }
-
-
-    /******** USER MANAGEMENT ********/
-
-
-
-    /* DynamoDB Table for App Users */
 
     const appUsersTable = new dynamodb.Table(this, 'app-users-table', {
       tableName: 'AppUsers',
@@ -45,6 +41,35 @@ export class AppBackendStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const userPool = new cognito.UserPool(this, 'safewalk-user-pool', {
+      userPoolName: 'safewalk-user-pool',
+      selfSignUpEnabled: true,
+      signInAliases: { email: true },
+      autoVerify: { email: true },
+      standardAttributes: {
+        email: { required: true, mutable: true },
+        fullname: { required: false, mutable: true },
+      },
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: false,
+      },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const userPoolClient = userPool.addClient('safewalk-app-client', {
+      userPoolClientName: 'safewalk-app-client',
+      authFlows: {
+        userPassword: true, 
+        userSrp: true, 
+      },
+      generateSecret: false, 
     });
 
     /* Lambda Function for User Profile Management */
@@ -71,9 +96,6 @@ export class AppBackendStack extends cdk.Stack {
 
     /******** PLATFORM ********/
 
-
-    /* Lambda Function for Platform Registration */
-
     const platformRegistrationHandler = new NodejsFunction(this, 'platform-registration-handler', {
       functionName: 'platform-registration-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -92,15 +114,34 @@ export class AppBackendStack extends cdk.Stack {
 
     appUsersTable.grantReadWriteData(platformRegistrationHandler);
 
+    const authHandler = new NodejsFunction(this, 'auth-handler', {
+      functionName: 'auth-handler',
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: 'index.handler',
+      entry: path.join(__dirname, '../../lambda/auth-handler/index.ts'),
+      environment: {
+        APP_CLIENT_ID: userPoolClient.userPoolClientId,
+      },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 128,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+    });
 
-
-
-
-
+    authHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'cognito-idp:SignUp',
+          'cognito-idp:ConfirmSignUp',
+          'cognito-idp:InitiateAuth',
+          'cognito-idp:GlobalSignOut',
+          'cognito-idp:ForgotPassword',
+          'cognito-idp:ConfirmForgotPassword',
+        ],
+        resources: [userPool.userPoolArn],
+      }),
+    );
 
     /******** API GATEWAY ********/
-
-
 
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
       apiName: 'safewalk-app-api',
@@ -117,7 +158,20 @@ export class AppBackendStack extends cdk.Stack {
       },
     });
 
+    const jwtAuthorizer = new apigatewayAuthorizers.HttpJwtAuthorizer(
+      'cognito-jwt-authorizer',
+      `https://cognito-idp.${this.region}.amazonaws.com/${userPool.userPoolId}`,
+      {
+        jwtAudience: [userPoolClient.userPoolClientId],
+      },
+    );
+
     /* Lambda Integrations */
+
+    const authLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'auth-integration',
+      authHandler,
+    );
 
     const userLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'app-user-profile-integration',
@@ -129,36 +183,85 @@ export class AppBackendStack extends cdk.Stack {
       platformRegistrationHandler
     );
 
-    /* API Routes */
+    /* API Routes – public (no authorizer) */
+
+    httpApi.addRoutes({
+      path: '/auth/sign-up',
+      methods: [apigateway.HttpMethod.POST],
+      integration: authLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/auth/confirm',
+      methods: [apigateway.HttpMethod.POST],
+      integration: authLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/auth/sign-in',
+      methods: [apigateway.HttpMethod.POST],
+      integration: authLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/auth/refresh',
+      methods: [apigateway.HttpMethod.POST],
+      integration: authLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/auth/sign-out',
+      methods: [apigateway.HttpMethod.POST],
+      integration: authLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/auth/forgot-password',
+      methods: [apigateway.HttpMethod.POST],
+      integration: authLambdaIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: '/auth/confirm-forgot-password',
+      methods: [apigateway.HttpMethod.POST],
+      integration: authLambdaIntegration,
+    });
+
+    /* API Routes – protected (JWT authorizer required) */
 
     httpApi.addRoutes({
       path: '/register',
       methods: [apigateway.HttpMethod.POST],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
 
     httpApi.addRoutes({
       path: '/register/platform',
       methods: [apigateway.HttpMethod.POST],
       integration: platformLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
 
     httpApi.addRoutes({
       path: '/sharing-code',
       methods: [apigateway.HttpMethod.GET],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
 
     httpApi.addRoutes({
       path: '/sharing-code',
       methods: [apigateway.HttpMethod.POST],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
 
     httpApi.addRoutes({
       path: '/sharing-code/connect',
       methods: [apigateway.HttpMethod.POST],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
 
     /* Trusted Contacts Routes */
@@ -167,27 +270,36 @@ export class AppBackendStack extends cdk.Stack {
       path: '/contacts',
       methods: [apigateway.HttpMethod.GET],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
 
     httpApi.addRoutes({
       path: '/contacts/{contactId}',
       methods: [apigateway.HttpMethod.PATCH],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
 
     httpApi.addRoutes({
       path: '/contacts/{contactId}',
       methods: [apigateway.HttpMethod.DELETE],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
     });
-    
-
-
-
 
     new cdk.CfnOutput(this, 'api-url', {
       value: httpApi.apiEndpoint,
       description: 'HTTP API Gateway endpoint URL',
+    });
+
+    new cdk.CfnOutput(this, 'user-pool-id', {
+      value: userPool.userPoolId,
+      description: 'Cognito User Pool ID',
+    });
+
+    new cdk.CfnOutput(this, 'user-pool-client-id', {
+      value: userPoolClient.userPoolClientId,
+      description: 'Cognito User Pool App Client ID',
     });
 
     new cdk.CfnOutput(this, 'table-name', {

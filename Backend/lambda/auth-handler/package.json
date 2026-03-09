@@ -1,0 +1,14 @@
+{
+  "name": "auth-handler",
+  "version": "1.0.0",
+  "description": "Lambda function for SafeWalk user authentication via AWS Cognito",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.709.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}
