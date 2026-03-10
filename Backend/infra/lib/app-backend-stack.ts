@@ -230,6 +230,13 @@ export class AppBackendStack extends cdk.Stack {
     /* API Routes – protected (JWT authorizer required) */
 
     httpApi.addRoutes({
+      path: '/me',
+      methods: [apigateway.HttpMethod.GET],
+      integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
       path: '/register',
       methods: [apigateway.HttpMethod.POST],
       integration: userLambdaIntegration,

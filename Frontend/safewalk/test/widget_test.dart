@@ -27,7 +27,9 @@ void main() {
             create: (_) => HomeViewModel(apiService: apiService),
           ),
           ChangeNotifierProvider(create: (_) => MapViewModel()),
-          ChangeNotifierProvider(create: (_) => ContactsViewModel()),
+          ChangeNotifierProvider(
+            create: (_) => ContactsViewModel(apiService: apiService),
+          ),
           ChangeNotifierProvider(create: (_) => SettingsViewModel()),
         ],
         child: const SafeWalkApp(),

@@ -60,15 +60,24 @@ interface PlatformListContactsResponse {
 
 /** Frontend-facing contact shape matching the Flutter Contact model. */
 interface FrontendContact {
-  id: string;
-  name: string;
-  isApproved: boolean;
-  sharesLocation: boolean;
-  sharesSOS: boolean;
-  isActivelyTracking: boolean;
+  /** Representative contact ID (outgoing preferred, fallback incoming). Used for DELETE. */
+  contactId: string;
+  /** The user's own contact ID for PATCH. Null if user has not configured their own sharing entry. */
+  outgoingContactId: string | null;
+  /** Partner's SafeWalk platform ID. */
+  safeWalkId: string;
+  /** Display name of the contact. */
+  displayName: string;
+  /** True when the app user has configured their own sharing entry for this contact. */
+  isOutgoing: boolean;
+  /** Whether the user shares their location with this contact (outgoing). */
+  locationSharing: boolean;
+  /** Whether the user shares SOS alerts with this contact (outgoing). */
+  sosSharing: boolean;
+  /** Whether the contact shares their location back with the user (incoming). */
   sharesBackLocation: boolean;
+  /** Whether the contact shares SOS alerts back with the user (incoming). */
   sharesBackSOS: boolean;
-  avatarUrl: string | null;
 }
 
 /**
@@ -84,9 +93,9 @@ function getPartnerSafeWalkId(c: PlatformContact): string {
  * Merges platform contact entries (outgoing / incoming) into a deduplicated
  * list of FrontendContacts grouped by partner safeWalkId.
  *
- * - outgoing entry  → populates sharesLocation / sharesSOS
- * - incoming entry  → populates sharesBackLocation / sharesBackSOS
- * - isApproved      → true when both directions exist (two-way)
+ * - incoming entry  → populates locationSharing / sosSharing (user's own sharing settings)
+ * - outgoing entry  → populates sharesBackLocation / sharesBackSOS (contact's sharing to user)
+ * - isOutgoing      → true when the user has their own sharing entry (platform-side "incoming")
  * - id              → the outgoing contactId is preferred; falls back to incoming
  */
 function buildFrontendContacts(platformContacts: PlatformContact[]): FrontendContact[] {
@@ -105,15 +114,15 @@ function buildFrontendContacts(platformContacts: PlatformContact[]): FrontendCon
   for (const { outgoing, incoming } of byPartner.values()) {
     const representative = outgoing ?? incoming!;
     contacts.push({
-      id: representative.contactId,
-      name: representative.displayName ?? 'Unbenannte Kontaktperson',
-      isApproved: !!(outgoing && incoming),
-      sharesLocation: incoming?.locationSharing ?? false,
-      sharesSOS: incoming?.sosSharing ?? false,
-      isActivelyTracking: false,
+      contactId: representative.contactId,
+      outgoingContactId: incoming?.contactId ?? null,
+      safeWalkId: getPartnerSafeWalkId(representative),
+      displayName: representative.displayName ?? 'Unbenannte Kontaktperson',
+      isOutgoing: !!incoming,
+      locationSharing: incoming?.locationSharing ?? false,
+      sosSharing: incoming?.sosSharing ?? false,
       sharesBackLocation: outgoing?.locationSharing ?? false,
       sharesBackSOS: outgoing?.sosSharing ?? false,
-      avatarUrl: null,
     });
   }
 
@@ -181,6 +190,9 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   if (!tableName) return missingEnvResponse('TABLE_NAME');
 
   switch (event.routeKey) {
+    case 'GET /me':
+      return handleGetMe(event, tableName);
+
     case 'POST /register':
       return handleRegister(event, tableName);
 
@@ -206,6 +218,41 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return jsonResponse(404, { error: 'Route not found' });
   }
 };
+
+// ---------------------------------------------------------------------------
+// Handler: GET /me  –  check if the user profile exists in DynamoDB
+// ---------------------------------------------------------------------------
+
+async function handleGetMe(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+
+    if (!result.Item) {
+      return jsonResponse(404, { error: 'User profile not found' });
+    }
+
+    return jsonResponse(200, {
+      userId,
+      email: result.Item.email ?? null,
+      displayName: result.Item.displayName ?? null,
+      hasPlatformRegistration: !!result.Item.safeWalkId,
+    });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return jsonResponse(500, {
+      error: 'Failed to retrieve user profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
 
 async function handleGetSharingCode(
   event: APIGatewayProxyEventV2,
@@ -580,7 +627,9 @@ async function handleDeleteContact(
 }
 
 // ---------------------------------------------------------------------------
-// Handler: POST /register  –  create the DynamoDB user profile after first sign-in
+// Handler: POST /register  –  create the DynamoDB user profile after first
+// sign-in AND automatically register the user on the SafeWalk platform so
+// the caller never has to make a separate POST /register/platform request.
 // ---------------------------------------------------------------------------
 
 async function handleRegister(
@@ -589,6 +638,15 @@ async function handleRegister(
 ): Promise<APIGatewayProxyResultV2> {
   const userId = getAuthenticatedUserId(event);
   if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  if (!platformBaseDomain) return missingEnvResponse('PLATFORM_DOMAIN');
+
+  const vendorId = getEnv('VENDOR_ID');
+  if (!vendorId) return missingEnvResponse('VENDOR_ID');
+
+  const apiKey = getEnv('API_KEY');
+  if (!apiKey) return missingEnvResponse('API_KEY');
 
   // email is available in Cognito id token claims
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -605,42 +663,164 @@ async function handleRegister(
     }
   }
 
+  // ── Step 1: create the DynamoDB user profile (idempotent) ─────────────────
+
+  let isNewProfile = false;
+
   try {
     const existing = await docClient.send(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
 
-    if (existing.Item) {
+    if (!existing.Item) {
+      const now = new Date().toISOString();
+      await docClient.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: {
+            safeWalkAppId: userId,
+            email: email ?? null,
+            displayName: displayName ?? null,
+            createdAt: now,
+            updatedAt: now,
+          },
+          // Guard against a race condition between the read and the write
+          ConditionExpression: 'attribute_not_exists(safeWalkAppId)',
+        }),
+      );
+      isNewProfile = true;
+      console.log('User profile created:', userId);
+    } else {
       console.log('User profile already exists:', userId);
-      return jsonResponse(200, { message: 'User profile already exists', userId });
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'ConditionalCheckFailedException') {
+      // Race condition – profile was created concurrently, treat as existing
+      console.log('Race condition: profile already exists for', userId);
+    } else {
+      console.error('Error creating user profile:', error);
+      return jsonResponse(500, {
+        error: 'Failed to create user profile',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  // ── Step 2: automatic platform registration ────────────────────────────────
+  //
+  // Re-read the record so we have the latest state regardless of whether the
+  // profile was just created or already existed.
+
+  try {
+    const userRecord = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+    const item = userRecord.Item;
+
+    // 2a. If the user already has a valid (non-expired) sharing code, return
+    //     immediately – no platform call needed.
+    if (item?.safeWalkId && item?.sharingCode && item?.sharingCodeExpiresAt) {
+      const expiresAt = new Date(item.sharingCodeExpiresAt as string);
+      if (expiresAt > new Date()) {
+        console.log('User already has valid platform registration and sharing code');
+        return jsonResponse(isNewProfile ? 201 : 200, {
+          message: isNewProfile ? 'User profile created' : 'User profile already exists',
+          userId,
+          sharingCode: item.sharingCode,
+          sharingCodeExpiresAt: item.sharingCodeExpiresAt,
+        });
+      }
+      console.log('Existing sharing code has expired – renewing');
     }
 
-    const now = new Date().toISOString();
+    // 2b. Register on the platform if no safeWalkId yet.
+    let safeWalkId: string;
+
+    if (item?.safeWalkId) {
+      safeWalkId = item.safeWalkId as string;
+      console.log('Reusing existing safeWalkId:', safeWalkId);
+    } else {
+      const registrationResponse = await sendRequest<{
+        success: boolean;
+        data: { safeWalkId: string };
+      }>(
+        `${platformBaseDomain}/register`,
+        'POST',
+        apiKey,
+        { platformUserId: userId, platformId: vendorId },
+      );
+
+      if (!registrationResponse.success || !registrationResponse.data?.safeWalkId) {
+        console.error('Invalid platform registration response:', registrationResponse);
+        // Profile is saved – return partial success so the caller can retry
+        // via POST /register/platform later.
+        return jsonResponse(isNewProfile ? 201 : 200, {
+          message: isNewProfile ? 'User profile created' : 'User profile already exists',
+          userId,
+          platformRegistrationError:
+            'Platform registration failed – please retry via POST /register/platform',
+        });
+      }
+
+      safeWalkId = registrationResponse.data.safeWalkId;
+      console.log('Platform registration successful, safeWalkId:', safeWalkId);
+    }
+
+    // 2c. Generate a fresh 24-hour sharing code.
+    const sharingCodeResponse = await sendRequest<{
+      success: boolean;
+      data: { sharingCode: string; safeWalkId: string; expiresAt: string };
+    }>(
+      `${platformBaseDomain}/sharing-codes`,
+      'POST',
+      apiKey,
+      { safeWalkId },
+    );
+
+    if (!sharingCodeResponse.success || !sharingCodeResponse.data?.sharingCode || !sharingCodeResponse.data?.expiresAt) {
+      console.error('Invalid sharing code response:', sharingCodeResponse);
+      return jsonResponse(isNewProfile ? 201 : 200, {
+        message: isNewProfile ? 'User profile created' : 'User profile already exists',
+        userId,
+        platformRegistrationError:
+          'Sharing code generation failed – please retry via POST /register/platform',
+      });
+    }
+
+    const { sharingCode, expiresAt: sharingCodeExpiresAt } = sharingCodeResponse.data;
+
+    // 2d. Persist safeWalkId + sharing code in DynamoDB.
     await docClient.send(
-      new PutCommand({
+      new UpdateCommand({
         TableName: tableName,
-        Item: {
-          safeWalkAppId: userId,
-          email: email ?? null,
-          displayName: displayName ?? null,
-          createdAt: now,
-          updatedAt: now,
+        Key: { safeWalkAppId: userId },
+        UpdateExpression:
+          'SET safeWalkId = :safeWalkId, sharingCode = :sharingCode, sharingCodeExpiresAt = :sharingCodeExpiresAt, updatedAt = :updatedAt',
+        ExpressionAttributeValues: {
+          ':safeWalkId': safeWalkId,
+          ':sharingCode': sharingCode,
+          ':sharingCodeExpiresAt': sharingCodeExpiresAt,
+          ':updatedAt': new Date().toISOString(),
         },
-        // Guard against a race condition between the read and the write
-        ConditionExpression: 'attribute_not_exists(safeWalkAppId)',
       }),
     );
 
-    console.log('User profile created:', userId);
-    return jsonResponse(201, { message: 'User profile created', userId });
+    console.log('Platform registration data stored for user:', userId);
+    return jsonResponse(isNewProfile ? 201 : 200, {
+      message: isNewProfile ? 'User profile created' : 'User profile already exists',
+      userId,
+      sharingCode,
+      sharingCodeExpiresAt,
+    });
   } catch (error) {
-    if (error instanceof Error && error.name === 'ConditionalCheckFailedException') {
-      return jsonResponse(200, { message: 'User profile already exists', userId });
-    }
-    console.error('Error creating user profile:', error);
-    return jsonResponse(500, {
-      error: 'Failed to create user profile',
-      details: error instanceof Error ? error.message : 'Unknown error',
+    console.error('Error during platform registration step:', error);
+    // The user profile was already saved – return partial success so the
+    // client can retry platform registration separately if needed.
+    return jsonResponse(isNewProfile ? 201 : 200, {
+      message: isNewProfile ? 'User profile created' : 'User profile already exists',
+      userId,
+      platformRegistrationError:
+        'Platform registration failed – please retry via POST /register/platform',
     });
   }
 }

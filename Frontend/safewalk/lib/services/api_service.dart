@@ -21,7 +21,8 @@ class ApiService {
   late final AuthService _authService;
 
   ApiService({ApiClient? client, AuthService? authService}) {
-    _client = client ??
+    _client =
+        client ??
         ApiClient(
           baseUrl: ApiConstants.baseUrl,
           timeout: ApiConstants.defaultTimeout,
@@ -126,10 +127,7 @@ class ApiService {
   Future<ApiResult> confirmSignUp(String email, String confirmationCode) async {
     return _client.post(
       ApiConstants.authConfirm,
-      body: {
-        'email': email,
-        'confirmationCode': confirmationCode,
-      },
+      body: {'email': email, 'confirmationCode': confirmationCode},
     );
   }
 
@@ -249,44 +247,52 @@ class ApiService {
   // PROTECTED ENDPOINTS (JWT required – auto-attached via _authenticatedRequest)
   // ===========================================================================
 
+  /// Checks whether the current user's profile exists in DynamoDB.
+  /// Returns 200 with profile data if it exists, 404 if not.
+  Future<ApiResult> getMe() async {
+    return _authenticatedRequest(() => _client.get(ApiConstants.me));
+  }
+
   /// Creates the user profile in DynamoDB (call once after first sign-in).
   Future<ApiResult> registerProfile({String? displayName}) async {
-    return _authenticatedRequest(() => _client.post(
-          ApiConstants.register,
-          body: displayName != null ? {'displayName': displayName} : {},
-        ));
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.register,
+        body: displayName != null ? {'displayName': displayName} : {},
+      ),
+    );
   }
 
   /// Registers the user on the SafeWalk platform.
   Future<ApiResult> registerPlatform() async {
     return _authenticatedRequest(
-        () => _client.post(ApiConstants.registerPlatform));
+      () => _client.post(ApiConstants.registerPlatform),
+    );
   }
 
   /// Retrieves the current sharing code for the logged-in user.
   Future<ApiResult> getSharingCode() async {
-    return _authenticatedRequest(
-        () => _client.get(ApiConstants.sharingCode));
+    return _authenticatedRequest(() => _client.get(ApiConstants.sharingCode));
   }
 
   /// Generates a new 24-hour sharing code.
   Future<ApiResult> generateSharingCode() async {
-    return _authenticatedRequest(
-        () => _client.post(ApiConstants.sharingCode));
+    return _authenticatedRequest(() => _client.post(ApiConstants.sharingCode));
   }
 
   /// Connects with a friend using their [sharingCode].
   Future<ApiResult> connectWithSharingCode(String sharingCode) async {
-    return _authenticatedRequest(() => _client.post(
-          ApiConstants.sharingCodeConnect,
-          body: {'sharingCode': sharingCode},
-        ));
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.sharingCodeConnect,
+        body: {'sharingCode': sharingCode},
+      ),
+    );
   }
 
   /// Fetches all trusted contacts for the logged-in user.
   Future<ApiResult> getContacts() async {
-    return _authenticatedRequest(
-        () => _client.get(ApiConstants.contacts));
+    return _authenticatedRequest(() => _client.get(ApiConstants.contacts));
   }
 
   /// Updates sharing settings for a specific contact.
@@ -295,19 +301,19 @@ class ApiService {
     required bool locationSharing,
     required bool sosSharing,
   }) async {
-    return _authenticatedRequest(() => _client.patch(
-          ApiConstants.contactById(contactId),
-          body: {
-            'locationSharing': locationSharing,
-            'sosSharing': sosSharing,
-          },
-        ));
+    return _authenticatedRequest(
+      () => _client.patch(
+        ApiConstants.contactById(contactId),
+        body: {'locationSharing': locationSharing, 'sosSharing': sosSharing},
+      ),
+    );
   }
 
   /// Removes a trusted contact.
   Future<ApiResult> deleteContact(String contactId) async {
     return _authenticatedRequest(
-        () => _client.delete(ApiConstants.contactById(contactId)));
+      () => _client.delete(ApiConstants.contactById(contactId)),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -317,6 +323,7 @@ class ApiService {
   /// Sends a test POST request to verify backend connectivity.
   Future<ApiResult> testConnection() async {
     return _authenticatedRequest(
-        () => _client.post(ApiConstants.registerPlatform));
+      () => _client.post(ApiConstants.registerPlatform),
+    );
   }
 }
