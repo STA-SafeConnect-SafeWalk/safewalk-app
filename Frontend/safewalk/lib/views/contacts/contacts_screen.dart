@@ -1,9 +1,7 @@
 // ContactsScreen displays the user's trusted (emergency) contacts.
 //
-// Design based on Figma SafeWalk page (nodes 2004:187 & 2172:367):
-// - Header with +/- toggle to show/hide the sharing-code panel
-// - Contact cards that expand on tap to reveal permission toggles
-//   and a "Kontakt entfernen" action.
+// All data is loaded from and persisted to the SafeWalk backend.
+// Loading spinners and error messages are shown transparently.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,15 +25,26 @@ const _kRed = Color(0xFFEF4444);
 const _kInputHint = Color(0xFF6B7280);
 const _kSosPurpleBg = Color(0x1A58355E); // rgba(88,53,94,0.10)
 
-class ContactsScreen extends StatelessWidget {
+class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
 
   @override
+  State<ContactsScreen> createState() => _ContactsScreenState();
+}
+
+class _ContactsScreenState extends State<ContactsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Trigger initial data load (contacts + sharing code).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ContactsViewModel>().loadInitialData();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ContactsViewModel(),
-      child: const _ContactsView(),
-    );
+    return const _ContactsView();
   }
 }
 
@@ -47,6 +56,9 @@ class _ContactsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<ContactsViewModel>();
+
+    // Show error snackbar reactively
+    _showMessages(context, vm);
 
     return Scaffold(
       backgroundColor: _kBackground,
@@ -62,48 +74,133 @@ class _ContactsView extends StatelessWidget {
 
             // ── Scrollable body ────────────────────────────────────
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                children: [
-                  // Sharing-code panel (animated)
-                  _SharingCodePanel(isVisible: vm.isSharingPanelOpen),
+              child: RefreshIndicator(
+                color: _kTealDark,
+                onRefresh: () => vm.fetchContacts(),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  children: [
+                    // Sharing-code panel (animated)
+                    _SharingCodePanel(isVisible: vm.isSharingPanelOpen),
 
-                  // Section label
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4, top: 16, bottom: 12),
-                    child: Text(
-                      'KONTAKTE',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _kTealMid,
-                        letterSpacing: 0.6,
+                    // Section label
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4, top: 16, bottom: 12),
+                      child: Text(
+                        'KONTAKTE',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _kTealMid,
+                          letterSpacing: 0.6,
+                        ),
                       ),
                     ),
-                  ),
 
-                  // Contact cards
-                  ...vm.contacts.map(
-                    (c) => Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _ContactCard(
-                        contact: c,
-                        isExpanded: vm.expandedContactId == c.id,
-                        onTap: () => vm.toggleExpanded(c.id),
-                        onToggleLocation: () => vm.toggleSharesLocation(c.id),
-                        onToggleSOS: () => vm.toggleSharesSOS(c.id),
-                        onDelete: () => vm.removeContact(c.id),
-                        onApprove: () => vm.toggleApproved(c.id),
+                    // Loading indicator
+                    if (vm.isLoadingContacts)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: CircularProgressIndicator(color: _kTealDark),
+                        ),
+                      )
+                    else if (vm.contacts.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: Text(
+                            'Noch keine Bezugspersonen vorhanden.',
+                            style: TextStyle(fontSize: 14, color: _kTealMid),
+                          ),
+                        ),
+                      )
+                    else
+                      // Contact cards
+                      ...vm.contacts.map(
+                        (c) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _ContactCard(
+                            contact: c,
+                            isExpanded: vm.expandedContactId == c.contactId,
+                            isBusy: vm.isContactBusy(c.contactId),
+                            onTap: () => vm.toggleExpanded(c.contactId),
+                            onToggleLocation: () =>
+                                vm.toggleLocationSharing(c.contactId),
+                            onToggleSOS: () => vm.toggleSosSharing(c.contactId),
+                            onDelete: () => _confirmDelete(context, vm, c),
+                            onAddSharing: () {
+                              if (!vm.isSharingPanelOpen) {
+                                vm.toggleSharingPanel();
+                              }
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Shows a confirmation dialog before deleting a contact.
+  void _confirmDelete(
+    BuildContext context,
+    ContactsViewModel vm,
+    Contact contact,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Kontakt entfernen'),
+        content: Text(
+          '${contact.displayName} wirklich als Bezugsperson entfernen?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              vm.removeContact(contact.contactId);
+            },
+            child: const Text('Entfernen', style: TextStyle(color: _kRed)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Listens to error / success messages and shows them as SnackBars.
+  void _showMessages(BuildContext context, ContactsViewModel vm) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (vm.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(vm.errorMessage!),
+            backgroundColor: _kRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        vm.clearError();
+      }
+      if (vm.successMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(vm.successMessage!),
+            backgroundColor: _kTealDark,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        vm.clearSuccess();
+      }
+    });
   }
 }
 
@@ -173,7 +270,6 @@ class _SharingCodePanel extends StatefulWidget {
 
 class _SharingCodePanelState extends State<_SharingCodePanel> {
   final TextEditingController _codeInputController = TextEditingController();
-  String? _errorText;
   bool _codeVisible = true;
 
   @override
@@ -203,8 +299,9 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
   void _handleAddContact() {
     final code = _codeInputController.text.trim();
     if (code.length < 6) return;
-    // TODO: validate and add contact via API
-    setState(() => _errorText = null);
+    final vm = context.read<ContactsViewModel>();
+    vm.connectWithCode(code);
+    _codeInputController.clear();
   }
 
   String _formatExpiry(DateTime dt) {
@@ -258,8 +355,24 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
                     ),
                   ),
                   const SizedBox(height: 10),
+
+                  // ── Loading sharing code ──────────────────────
+                  if (vm.isLoadingSharingCode)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _kTealDark,
+                          ),
+                        ),
+                      ),
+                    )
                   // ── Active code state ─────────────────────────
-                  if (vm.activeCode != null) ...[
+                  else if (vm.activeCode != null) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -313,21 +426,24 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Expiry info
+                    // Expiry info — red text when < 1 hour remaining
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.schedule_rounded,
                           size: 14,
-                          color: _kTealMid,
+                          color: vm.isCodeExpiringSoon ? _kRed : _kTealMid,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             'Gültig bis: ${_formatExpiry(vm.codeExpiresAt!)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: _kTealMid,
+                              color: vm.isCodeExpiringSoon ? _kRed : _kTealMid,
+                              fontWeight: vm.isCodeExpiringSoon
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -339,11 +455,22 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
                       width: double.infinity,
                       height: 40,
                       child: OutlinedButton.icon(
-                        onPressed: vm.generateCode,
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text(
-                          'Code erneuern',
-                          style: TextStyle(
+                        onPressed: vm.isGeneratingCode ? null : vm.generateCode,
+                        icon: vm.isGeneratingCode
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _kTealDark,
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 18),
+                        label: Text(
+                          vm.isGeneratingCode
+                              ? 'Wird generiert…'
+                              : 'Code erneuern',
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -358,16 +485,27 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
                       ),
                     ),
                   ] else ...[
-                    // ── No code yet ──────────────────────────────
+                    // ── No code yet / code expired ───────────────
                     SizedBox(
                       width: double.infinity,
                       height: 40,
                       child: ElevatedButton.icon(
-                        onPressed: vm.generateCode,
-                        icon: const Icon(Icons.visibility_rounded, size: 24),
-                        label: const Text(
-                          'Code generieren',
-                          style: TextStyle(
+                        onPressed: vm.isGeneratingCode ? null : vm.generateCode,
+                        icon: vm.isGeneratingCode
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.visibility_rounded, size: 24),
+                        label: Text(
+                          vm.isGeneratingCode
+                              ? 'Wird generiert…'
+                              : 'Code generieren',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                             letterSpacing: -0.6,
@@ -438,38 +576,41 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
                 ],
               ),
             ),
-            // Red error message between input and button
-            if (_errorText != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                _errorText!,
-                style: const TextStyle(fontSize: 12, color: _kRed),
-              ),
-            ],
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               height: 40,
               child: ElevatedButton(
-                onPressed: _canAddContact ? _handleAddContact : null,
+                onPressed: (_canAddContact && !vm.isConnecting)
+                    ? _handleAddContact
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _kTealDark,
-                  disabledBackgroundColor: _kTealDark.withOpacity(0.4),
+                  disabledBackgroundColor: _kTealDark.withValues(alpha: 0.4),
                   foregroundColor: Colors.white,
-                  disabledForegroundColor: Colors.white.withOpacity(0.7),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Kontakt hinzufügen',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: -0.6,
-                  ),
-                ),
+                child: vm.isConnecting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Kontakt hinzufügen',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.6,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 10),
@@ -509,20 +650,22 @@ class _ContactCard extends StatelessWidget {
   const _ContactCard({
     required this.contact,
     required this.isExpanded,
+    required this.isBusy,
     required this.onTap,
     required this.onToggleLocation,
     required this.onToggleSOS,
     required this.onDelete,
-    required this.onApprove,
+    required this.onAddSharing,
   });
 
   final Contact contact;
   final bool isExpanded;
+  final bool isBusy;
   final VoidCallback onTap;
   final VoidCallback onToggleLocation;
   final VoidCallback onToggleSOS;
   final VoidCallback onDelete;
-  final VoidCallback onApprove;
+  final VoidCallback onAddSharing;
 
   @override
   Widget build(BuildContext context) {
@@ -554,7 +697,7 @@ class _ContactCard extends StatelessWidget {
               // ── Top row (avatar + name + chevron) ────────────────
               Row(
                 children: [
-                  _Avatar(name: contact.name, avatarUrl: contact.avatarUrl),
+                  _Avatar(name: contact.displayName),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -564,7 +707,7 @@ class _ContactCard extends StatelessWidget {
                           children: [
                             Flexible(
                               child: Text(
-                                contact.name,
+                                contact.displayName,
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -573,11 +716,32 @@ class _ContactCard extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (!contact.isOutgoing) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Nur eingehend',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF166534),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          contact.permissionDescription,
+                          contact.sharesBackDescription,
                           style: const TextStyle(
                             fontSize: 14,
                             color: _kTealMid,
@@ -587,15 +751,25 @@ class _ContactCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  AnimatedRotation(
-                    turns: isExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 250),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: _kTealMid,
-                      size: 24,
+                  if (isBusy)
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _kTealDark,
+                      ),
+                    )
+                  else
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 250),
+                      child: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: _kTealMid,
+                        size: 24,
+                      ),
                     ),
-                  ),
                 ],
               ),
 
@@ -606,13 +780,23 @@ class _ContactCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 10),
                   child: Column(
                     children: [
-                      if (contact.isApproved) ...[
-                        // Permission toggle rows
+                      // Permission info + toggles — only when outgoing
+                      if (contact.isOutgoing) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            contact.permissionDescription,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: _kTealMid,
+                            ),
+                          ),
+                        ),
                         _ToggleRow(
                           icon: Icons.location_on_outlined,
                           iconBgColor: const Color(0x1A00666B),
                           label: 'Standort teilen',
-                          value: contact.sharesLocation,
+                          value: contact.locationSharing,
                           onChanged: onToggleLocation,
                           showTopBorder: true,
                         ),
@@ -620,52 +804,30 @@ class _ContactCard extends StatelessWidget {
                           icon: Icons.emergency_outlined,
                           iconBgColor: _kSosPurpleBg,
                           label: 'Notfall SOS teilen',
-                          value: contact.sharesSOS,
+                          value: contact.sosSharing,
                           onChanged: onToggleSOS,
                           showTopBorder: false,
                         ),
-                        // sharesBack info text
-                      ] else ...[
-                        // Not yet approved — show "Kontakt zum Teilen hinzufügen" button
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 40,
-                          child: ElevatedButton.icon(
-                            onPressed: onApprove,
-                            icon: const Icon(
-                              Icons.person_add_alt_1_rounded,
-                              size: 20,
-                            ),
-                            label: const Text(
-                              'Kontakt zum Teilen hinzufügen',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _kTealDark,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 0,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (contact.sharesBackDescription != null)
+                      ] else
                         Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Center(
-                            child: Text(
-                              contact.sharesBackDescription!,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: _kTealMid,
-                                height: 1.43,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: isBusy ? null : onAddSharing,
+                              icon: const Icon(Icons.share_outlined, size: 18),
+                              label: const Text(
+                                'Kontakt zum Teilen hinzufügen',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _kTealDark,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                               ),
                             ),
                           ),
@@ -674,7 +836,7 @@ class _ContactCard extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: GestureDetector(
-                          onTap: onDelete,
+                          onTap: isBusy ? null : onDelete,
                           child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -796,10 +958,9 @@ class _ToggleRow extends StatelessWidget {
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, this.avatarUrl});
+  const _Avatar({required this.name});
 
   final String name;
-  final String? avatarUrl;
 
   String get _initials {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -816,19 +977,10 @@ class _Avatar extends StatelessWidget {
       height: 56,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: _kTealMid.withOpacity(0.15),
+        color: _kTealMid.withValues(alpha: 0.15),
         border: Border.all(color: _kBackground, width: 2),
       ),
-      child: avatarUrl != null
-          ? ClipOval(
-              child: Image.network(
-                avatarUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    _InitialsPlaceholder(initials: _initials),
-              ),
-            )
-          : _InitialsPlaceholder(initials: _initials),
+      child: _InitialsPlaceholder(initials: _initials),
     );
   }
 }

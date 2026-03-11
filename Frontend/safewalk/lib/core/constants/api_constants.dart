@@ -42,6 +42,9 @@ class ApiConstants {
   // Protected endpoints (JWT required)
   // ---------------------------------------------------------------------------
 
+  /// GET – Check whether the current user's profile exists in DynamoDB.
+  static const String me = '/me';
+
   /// POST – Create user profile in DynamoDB (once after first login).
   static const String register = '/register';
 

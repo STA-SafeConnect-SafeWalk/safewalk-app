@@ -5,6 +5,8 @@
 // user switches between tabs.
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:safewalk/viewmodels/contacts_viewmodel.dart';
 import 'package:safewalk/views/home/home_screen.dart';
 import 'package:safewalk/views/map/map_screen.dart';
 import 'package:safewalk/views/contacts/contacts_screen.dart';
@@ -50,7 +52,13 @@ class _MainShellState extends State<MainShell> {
       body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+          // Refresh contacts data when switching to the Kontakte tab.
+          if (index == 2) {
+            context.read<ContactsViewModel>().fetchContacts();
+          }
+        },
         type: BottomNavigationBarType.fixed,
         items: _navItems,
       ),

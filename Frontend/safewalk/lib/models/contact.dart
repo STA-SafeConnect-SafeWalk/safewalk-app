@@ -1,86 +1,113 @@
 /// Represents a trusted contact in SafeWalk.
+///
+/// Maps to the backend response from GET /contacts:
+/// ```json
+/// {
+///   "contactId": "...",
+///   "outgoingContactId": "...",
+///   "safeWalkId": "...",
+///   "displayName": "Jane Doe",
+///   "isOutgoing": true,
+///   "locationSharing": true,
+///   "sosSharing": true,
+///   "sharesBackLocation": true,
+///   "sharesBackSOS": false
+/// }
+/// ```
 class Contact {
-  final String id;
+  /// Representative contact ID (outgoing preferred). Used for DELETE.
+  final String contactId;
 
-  /// Display name of the contact.
-  final String name;
+  /// The user's own (outgoing) contact ID for PATCH. Null if only incoming.
+  final String? outgoingContactId;
 
-  /// Whether the user has granted this contact access (location / SOS toggles
-  /// are visible only when [isApproved] is true).
-  final bool isApproved;
+  /// SafeWalk platform ID of the contact.
+  final String safeWalkId;
 
-  /// Whether the contact can see the user's location.
-  final bool sharesLocation;
+  /// Display name of the contact (may be null from backend).
+  final String displayName;
 
-  /// Whether the contact receives the user's SOS alarm.
-  final bool sharesSOS;
+  /// Whether the user has an outgoing sharing entry for this contact.
+  final bool isOutgoing;
 
-  /// Whether this contact is currently actively tracking (green dot indicator).
-  final bool isActivelyTracking;
+  /// Whether the user shares their location with this contact (outgoing).
+  final bool locationSharing;
 
-  /// Whether this contact shares their own location back with the user.
+  /// Whether the user shares SOS alerts with this contact (outgoing).
+  final bool sosSharing;
+
+  /// Whether the contact shares their location back with the user (incoming).
   final bool sharesBackLocation;
 
-  /// Whether this contact shares their own SOS alarm back with the user.
+  /// Whether the contact shares SOS alerts back with the user (incoming).
   final bool sharesBackSOS;
 
-  /// Optional remote URL for the contact's profile picture.
-  final String? avatarUrl;
-
   const Contact({
-    required this.id,
-    required this.name,
-    this.isApproved = true,
-    this.sharesLocation = false,
-    this.sharesSOS = false,
-    this.isActivelyTracking = false,
+    required this.contactId,
+    this.outgoingContactId,
+    required this.safeWalkId,
+    required this.displayName,
+    this.isOutgoing = false,
+    this.locationSharing = false,
+    this.sosSharing = false,
     this.sharesBackLocation = false,
     this.sharesBackSOS = false,
-    this.avatarUrl,
   });
 
-  /// Computed permission description derived from the toggles.
-  String get permissionDescription {
-    if (sharesLocation && sharesSOS) return 'Sieht Standort & SOS Alarm';
-    if (sharesLocation) return 'Sieht deinen Standort';
-    if (sharesSOS) return 'Sieht dein SOS Alarm';
-    return 'Keine Berechtigung';
+  /// Constructs a [Contact] from a JSON map returned by the backend.
+  factory Contact.fromJson(Map<String, dynamic> json) {
+    return Contact(
+      contactId: json['contactId'] as String? ?? '',
+      outgoingContactId: json['outgoingContactId'] as String?,
+      safeWalkId: json['safeWalkId'] as String? ?? '',
+      displayName: json['displayName'] as String? ?? 'Unbekannt',
+      isOutgoing: json['isOutgoing'] as bool? ?? false,
+      locationSharing: json['locationSharing'] as bool? ?? false,
+      sosSharing: json['sosSharing'] as bool? ?? false,
+      sharesBackLocation: json['sharesBackLocation'] as bool? ?? false,
+      sharesBackSOS: json['sharesBackSOS'] as bool? ?? false,
+    );
   }
 
-  /// Computed description of what this contact shares back with the user.
-  /// Returns null when the contact shares nothing back.
-  String? get sharesBackDescription {
-    if (!sharesBackLocation && !sharesBackSOS) return null;
-    final firstName = name.split(' ').first;
+  /// Describes what the user shares with this contact (outgoing).
+  String get permissionDescription {
+    if (locationSharing && sosSharing) return 'Du teilst Standort & SOS';
+    if (locationSharing) return 'Du teilst deinen Standort';
+    if (sosSharing) return 'Du teilst deinen SOS Alarm';
+    return 'Du teilst nichts';
+  }
+
+  /// Describes what the contact shares back with the user (incoming).
+  String get sharesBackDescription {
     if (sharesBackLocation && sharesBackSOS) {
-      return '$firstName teilt Standort & SOS Alarm mit dir.';
+      return 'Teilt Standort & SOS mit dir';
     }
-    if (sharesBackLocation)
-      return '$firstName teilt seinen/ihren Standort mit dir.';
-    return '$firstName teilt seinen/ihren SOS Alarm mit dir.';
+    if (sharesBackLocation) return 'Teilt Standort mit dir';
+    if (sharesBackSOS) return 'Teilt SOS mit dir';
+    return 'Teilt nichts mit dir';
   }
 
   Contact copyWith({
-    String? id,
-    String? name,
-    bool? isApproved,
-    bool? sharesLocation,
-    bool? sharesSOS,
-    bool? isActivelyTracking,
+    String? contactId,
+    String? outgoingContactId,
+    String? safeWalkId,
+    String? displayName,
+    bool? isOutgoing,
+    bool? locationSharing,
+    bool? sosSharing,
     bool? sharesBackLocation,
     bool? sharesBackSOS,
-    String? avatarUrl,
   }) {
     return Contact(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      isApproved: isApproved ?? this.isApproved,
-      sharesLocation: sharesLocation ?? this.sharesLocation,
-      sharesSOS: sharesSOS ?? this.sharesSOS,
-      isActivelyTracking: isActivelyTracking ?? this.isActivelyTracking,
+      contactId: contactId ?? this.contactId,
+      outgoingContactId: outgoingContactId ?? this.outgoingContactId,
+      safeWalkId: safeWalkId ?? this.safeWalkId,
+      displayName: displayName ?? this.displayName,
+      isOutgoing: isOutgoing ?? this.isOutgoing,
+      locationSharing: locationSharing ?? this.locationSharing,
+      sosSharing: sosSharing ?? this.sosSharing,
       sharesBackLocation: sharesBackLocation ?? this.sharesBackLocation,
       sharesBackSOS: sharesBackSOS ?? this.sharesBackSOS,
-      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 }

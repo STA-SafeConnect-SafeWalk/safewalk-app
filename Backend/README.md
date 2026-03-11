@@ -19,6 +19,7 @@ Vollständige API-Referenz für Frontend-Entwickler. Beschreibt alle Endpunkte, 
    - [POST /auth/forgot-password](#post-authforgot-password)
    - [POST /auth/confirm-forgot-password](#post-authconfirm-forgot-password)
 6. [Geschützte Endpunkte (JWT erforderlich)](#geschützte-endpunkte-jwt-erforderlich)
+   - [GET /me](#get-me)
    - [POST /register](#post-register)
    - [POST /register/platform](#post-registerplatform)
    - [GET /sharing-code](#get-sharing-code)
@@ -125,8 +126,9 @@ Der JWT-Authorizer extrahiert automatisch die `sub`-Claim (Cognito User ID) aus 
 
 | Methode | Pfad | Beschreibung |
 |---|---|---|
-| `POST` | `/register` | Benutzerprofil in DynamoDB anlegen (nach erstem Login) |
-| `POST` | `/register/platform` | Benutzer bei SafeWalk-Plattform registrieren |
+| `GET` | `/me` | Eigenes Benutzerprofil abrufen (prüft ob Profil existiert) |
+| `POST` | `/register` | Benutzerprofil anlegen **und** automatisch auf der Plattform registrieren (einmalig nach erstem Login) |
+| `POST` | `/register/platform` | Benutzer manuell bei SafeWalk-Plattform registrieren (Legacy) |
 | `GET` | `/sharing-code` | Aktuellen Sharing Code abrufen |
 | `POST` | `/sharing-code` | Neuen Sharing Code generieren |
 | `POST` | `/sharing-code/connect` | Mit Sharing Code eines Freundes verbinden |
@@ -280,6 +282,8 @@ Erneuert das `idToken` und das `accessToken` mithilfe des `refreshToken`. Verwen
 
 ```json
 {
+  "email": "user@example.com",
+  "password": "MyPassword",
   "refreshToken": "eyJjdHki..."
 }
 ```
@@ -427,11 +431,54 @@ Die Benutzeridentität (`userId`) wird automatisch aus dem `sub`-Claim des Token
 
 ---
 
+### GET /me
+
+Gibt das eigene Benutzerprofil zurück. Dient primär dazu zu prüfen, ob ein gültiges Profil in DynamoDB existiert, ohne es neu anzulegen.
+
+> **Wichtig für den Login-Flow:** Das Frontend ruft `GET /me` bei jedem normalen Login und bei der Session-Wiederherstellung auf. Gibt der Endpunkt `404` zurück, existiert kein Profil mehr (z. B. weil der Benutzer administrativ gelöscht wurde). In diesem Fall wird der Benutzer automatisch ausgeloggt und erhält eine entsprechende Fehlermeldung.
+
+**Request**
+
+Kein Body oder Query-Parameter nötig – der Benutzer wird über den JWT-Token identifiziert.
+
+```
+GET /me
+Authorization: Bearer <idToken>
+```
+
+**Response 200 – Erfolgreich**
+
+```json
+{
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "email": "max@example.com",
+  "displayName": "Max Mustermann",
+  "hasPlatformRegistration": true
+}
+```
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `userId` | `string` | Cognito `sub` des Benutzers |
+| `email` | `string` | E-Mail-Adresse des Benutzers |
+| `displayName` | `string?` | Anzeigename (kann `null` sein) |
+| `hasPlatformRegistration` | `boolean` | Ob der Benutzer bereits auf der SafeWalk-Plattform registriert ist |
+
+**Mögliche Fehler**
+
+| Status | Bedingung |
+|---|---|
+| `401` | Kein oder ungültiger Token |
+| `404` | Kein Benutzerprofil gefunden (Profil wurde gelöscht) |
+| `500` | Interner Serverfehler |
+
+---
+
 ### POST /register
 
-Erstellt das Benutzerprofil in der DynamoDB-Datenbank. **Muss einmalig nach dem ersten Login aufgerufen werden**, bevor andere geschützte Endpunkte genutzt werden können.
+Erstellt das Benutzerprofil in DynamoDB **und** registriert den Benutzer automatisch auf der SafeWalk-Plattform. **Muss einmalig nach dem allerersten Login aufgerufen werden.**
 
-Die E-Mail-Adresse wird automatisch aus dem `email`-Claim des ID Tokens gelesen.
+Die E-Mail-Adresse wird automatisch aus dem `email`-Claim des ID Tokens gelesen. Ein separater Aufruf von `POST /register/platform` ist danach **nicht mehr nötig**.
 
 **Request Body** (optional)
 
@@ -450,12 +497,26 @@ Oder leerer Body / kein Body:
 {}
 ```
 
-**Response 201 – Profil erstellt**
+**Response 201 – Profil und Plattform-Registrierung erfolgreich**
 
 ```json
 {
   "message": "User profile created",
-  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "sharingCode": "ABCDEF",
+  "sharingCodeExpiresAt": "2026-03-10T12:00:00.000Z"
+}
+```
+
+**Response 201 – Profil erstellt, Plattform-Registrierung fehlgeschlagen**
+
+Das Profil wird trotzdem angelegt. Die Plattform-Registrierung kann später über `POST /register/platform` nachgeholt werden.
+
+```json
+{
+  "message": "User profile created",
+  "userId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "platformRegistrationError": "Could not reach SafeWalk platform"
 }
 ```
 
@@ -478,6 +539,8 @@ Oder leerer Body / kein Body:
 ---
 
 ### POST /register/platform
+
+> **Hinweis:** Seit der Überarbeitung von `POST /register` wird die Plattform-Registrierung **automatisch** beim ersten Aufruf von `POST /register` durchgeführt. Dieser Endpunkt wird daher nur noch benötigt, wenn die automatische Registrierung innerhalb von `POST /register` fehlgeschlagen ist (erkennbar am Feld `platformRegistrationError` in der Response).
 
 Registriert den Benutzer bei der externen SafeWalk-Plattform. Dabei wird eine `safeWalkId` zugewiesen und ein erster Sharing Code generiert.
 
@@ -563,7 +626,7 @@ Authorization: Bearer <idToken>
 | `404` | Benutzer nicht gefunden oder noch kein Sharing Code vorhanden |
 | `500` | Interner Serverfehler |
 
-**Voraussetzung:** `POST /register/platform` muss vorher aufgerufen worden sein (dort wird der erste Sharing Code generiert).
+**Voraussetzung:** `POST /register` muss vorher aufgerufen worden sein (der erste Sharing Code wird dabei automatisch generiert).
 
 ---
 
@@ -597,7 +660,7 @@ Authorization: Bearer <idToken>
 | `401` | Kein oder ungültiger Token |
 | `502` | Plattform nicht erreichbar oder ungültige Antwort |
 
-**Voraussetzung:** `POST /register/platform` muss vorher aufgerufen worden sein.
+**Voraussetzung:** `POST /register` muss vorher aufgerufen worden sein.
 
 ---
 
@@ -634,7 +697,7 @@ Verbindet den Benutzer mit einem Freund über dessen Sharing Code. Der Benutzer 
 | `401` | Kein oder ungültiger Token |
 | `502` | Plattform hat die Verknüpfung abgelehnt (z. B. ungültiger/abgelaufener Code) |
 
-**Voraussetzung:** Beide Benutzer (der Anfragende und der Freund) müssen via `POST /register/platform` registriert sein. Der Freund muss einen gültigen Sharing Code haben.
+**Voraussetzung:** Beide Benutzer (der Anfragende und der Freund) müssen via `POST /register` registriert sein. Der Freund muss einen gültigen Sharing Code haben.
 
 ---
 
@@ -658,17 +721,25 @@ Authorization: Bearer <idToken>
   "contacts": [
     {
       "contactId": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
+      "outgoingContactId": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
       "safeWalkId": "friend-safewalk-id",
       "displayName": "Jane Doe",
+      "isOutgoing": true,
       "locationSharing": true,
-      "sosSharing": true
+      "sosSharing": true,
+      "sharesBackLocation": true,
+      "sharesBackSOS": false
     },
     {
       "contactId": "a9b8c7d6-5432-10fe-dcba-0987654321fe",
+      "outgoingContactId": null,
       "safeWalkId": "other-friend-id",
       "displayName": "John Smith",
+      "isOutgoing": false,
       "locationSharing": false,
-      "sosSharing": true
+      "sosSharing": false,
+      "sharesBackLocation": false,
+      "sharesBackSOS": true
     }
   ]
 }
@@ -676,11 +747,17 @@ Authorization: Bearer <idToken>
 
 | Feld | Typ | Beschreibung |
 |---|---|---|
-| `contactId` | `string` | Eindeutige ID des Kontakts (für PATCH/DELETE verwenden) |
+| `contactId` | `string` | Repräsentative ID des Kontakts (für DELETE verwenden) |
+| `outgoingContactId` | `string?` | ID des eigenen Sharing-Eintrags (für PATCH verwenden). `null` wenn nur eingehend. |
 | `safeWalkId` | `string` | SafeWalk-Plattform-ID des Kontakts |
 | `displayName` | `string?` | Anzeigename des Kontakts (kann `null` sein) |
-| `locationSharing` | `boolean` | Ob Standort-Sharing für diesen Kontakt aktiviert ist |
-| `sosSharing` | `boolean` | Ob SOS-Sharing für diesen Kontakt aktiviert ist |
+| `isOutgoing` | `boolean` | `true` wenn der Benutzer einen ausgehenden Sharing-Eintrag mit diesem Kontakt hat |
+| `locationSharing` | `boolean` | Ob der Benutzer seinen Standort mit diesem Kontakt teilt (ausgehend) |
+| `sosSharing` | `boolean` | Ob der Benutzer SOS-Alerts mit diesem Kontakt teilt (ausgehend) |
+| `sharesBackLocation` | `boolean` | Ob der Kontakt seinen Standort mit dem Benutzer teilt (eingehend) |
+| `sharesBackSOS` | `boolean` | Ob der Kontakt SOS-Alerts mit dem Benutzer teilt (eingehend) |
+
+> **Hinweis:** Die Toggles im Frontend (Standort/SOS teilen) steuern `locationSharing` und `sosSharing` (ausgehend). Für `PATCH /contacts/{contactId}` muss die `outgoingContactId` verwendet werden, nicht die `contactId`. Toggles werden nur angezeigt, wenn `isOutgoing` `true` ist.
 
 **Mögliche Fehler**
 
@@ -690,7 +767,7 @@ Authorization: Bearer <idToken>
 | `401` | Kein oder ungültiger Token |
 | `502` | Plattform nicht erreichbar |
 
-**Voraussetzung:** `POST /register/platform` muss vorher aufgerufen worden sein.
+**Voraussetzung:** `POST /register` muss vorher aufgerufen worden sein.
 
 ---
 
@@ -698,11 +775,13 @@ Authorization: Bearer <idToken>
 
 Aktualisiert die Sharing-Einstellungen (Standort und/oder SOS) für einen bestimmten vertrauenswürdigen Kontakt. Die Einstellungen sind unabhängig von der Kontaktbeziehung selbst – ein Kontakt kann existieren, ohne dass Sharing aktiviert ist.
 
+> **Wichtig:** Für den `contactId`-Path-Parameter muss die `outgoingContactId` aus `GET /contacts` verwendet werden (nicht die `contactId`). `outgoingContactId` identifiziert den eigenen Sharing-Eintrag des Benutzers.
+
 **Path-Parameter**
 
 | Parameter | Typ | Pflicht | Beschreibung |
 |---|---|---|---|
-| `contactId` | `string` | ✅ | Die `contactId` aus `GET /contacts` |
+| `contactId` | `string` | ✅ | Die `outgoingContactId` aus `GET /contacts` |
 
 **Request Body**
 
@@ -839,52 +918,55 @@ curl -X POST "$BASE_URL/auth/sign-in" \
   }'
 # → Speichere idToken, accessToken, refreshToken
 
-# 4. Benutzerprofil anlegen (einmalig nach erstem Login)
+# 4. Benutzerprofil anlegen + automatisch auf Plattform registrieren (einmalig nach erstem Login)
 curl -X POST "$BASE_URL/register" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <idToken>" \
   -d '{ "displayName": "Max Mustermann" }'
+# → Response enthält direkt sharingCode und sharingCodeExpiresAt
+# → POST /register/platform ist nicht mehr nötig
 
-# 5. Bei SafeWalk-Plattform registrieren
-curl -X POST "$BASE_URL/register/platform" \
-  -H "Content-Type: application/json" \
+# 4b. [Optional] Profil-Existenz prüfen (bei normalem Login / Session-Restore)
+curl "$BASE_URL/me" \
   -H "Authorization: Bearer <idToken>"
+# → 200: Profil existiert, Login erlaubt
+# → 404: Profil wurde gelöscht, Benutzer wird ausgeloggt
 
-# 6. Aktuellen Sharing Code abrufen
+# 5. Aktuellen Sharing Code abrufen
 curl "$BASE_URL/sharing-code" \
   -H "Authorization: Bearer <idToken>"
 
-# 7. Neuen Sharing Code generieren
+# 6. Neuen Sharing Code generieren
 curl -X POST "$BASE_URL/sharing-code" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <idToken>"
 
-# 8. Über Sharing Code eines Freundes verbinden
+# 7. Über Sharing Code eines Freundes verbinden
 curl -X POST "$BASE_URL/sharing-code/connect" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <idToken>" \
   -d '{ "sharingCode": "XYZABC" }'
 
-# 9. Kontakte auflisten
+# 8. Kontakte auflisten
 curl "$BASE_URL/contacts" \
   -H "Authorization: Bearer <idToken>"
 
-# 10. Sharing-Einstellungen eines Kontakts ändern
+# 9. Sharing-Einstellungen eines Kontakts ändern
 curl -X PATCH "$BASE_URL/contacts/<contactId>" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <idToken>" \
   -d '{ "locationSharing": true, "sosSharing": false }'
 
-# 11. Kontakt entfernen
+# 10. Kontakt entfernen
 curl -X DELETE "$BASE_URL/contacts/<contactId>" \
   -H "Authorization: Bearer <idToken>"
 
-# 12. Token erneuern (wenn idToken abgelaufen)
+# 11. Token erneuern (wenn idToken abgelaufen)
 curl -X POST "$BASE_URL/auth/refresh" \
   -H "Content-Type: application/json" \
   -d '{ "refreshToken": "<refreshToken>" }'
 
-# 13. Abmelden
+# 12. Abmelden
 curl -X POST "$BASE_URL/auth/sign-out" \
   -H "Content-Type: application/json" \
   -d '{ "accessToken": "<accessToken>" }'

@@ -21,7 +21,7 @@ class LoginViewModel extends ChangeNotifier {
   final ApiService _apiService;
 
   LoginViewModel({ApiService? apiService})
-      : _apiService = apiService ?? ApiService();
+    : _apiService = apiService ?? ApiService();
 
   // ---------------------------------------------------------------------------
   // Observable state
@@ -47,6 +47,10 @@ class LoginViewModel extends ChangeNotifier {
   String _pendingEmail = '';
   String get pendingEmail => _pendingEmail;
 
+  /// Tracks whether the user just completed sign-up confirmation, so that
+  /// the next [signIn] call creates the profile instead of just checking it.
+  bool _isFirstLogin = false;
+
   // ---------------------------------------------------------------------------
   // Mode switching
   // ---------------------------------------------------------------------------
@@ -61,7 +65,8 @@ class LoginViewModel extends ChangeNotifier {
   /// Convenience: toggles between sign-in and sign-up.
   void toggleMode() {
     switchMode(
-        _authMode == AuthMode.signIn ? AuthMode.signUp : AuthMode.signIn);
+      _authMode == AuthMode.signIn ? AuthMode.signUp : AuthMode.signIn,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -77,17 +82,32 @@ class LoginViewModel extends ChangeNotifier {
     final result = await _apiService.signIn(email, password);
 
     if (result.isSuccess) {
-      // After sign-in, create the user profile in DynamoDB (idempotent).
-      await _apiService.registerProfile();
+      if (_isFirstLogin) {
+        // First login after sign-up: create the profile in DynamoDB.
+        await _apiService.registerProfile();
+        _isFirstLogin = false;
+      } else {
+        // Normal login: verify the user profile still exists.
+        final meResult = await _apiService.getMe();
+        if (!meResult.isSuccess) {
+          // Profile was deleted – sign out and block access.
+          await _apiService.signOut();
+          _isAuthenticated = false;
+          _statusMessage =
+              'Kein Benutzerprofil gefunden. Bitte registriere dich erneut.';
+          _isLoading = false;
+          notifyListeners();
+          return;
+        }
+      }
 
       _isAuthenticated = true;
       _statusMessage = 'Login erfolgreich!';
     } else {
       final data = result.data;
-      _statusMessage =
-          (data is Map && data['error'] != null)
-              ? data['error'] as String
-              : result.message ?? 'Login fehlgeschlagen.';
+      _statusMessage = (data is Map && data['error'] != null)
+          ? data['error'] as String
+          : result.message ?? 'Login fehlgeschlagen.';
     }
 
     _isLoading = false;
@@ -104,8 +124,11 @@ class LoginViewModel extends ChangeNotifier {
     _statusMessage = '';
     notifyListeners();
 
-    final result = await _apiService.signUp(email, password,
-        displayName: displayName);
+    final result = await _apiService.signUp(
+      email,
+      password,
+      displayName: displayName,
+    );
 
     if (result.isSuccess) {
       _pendingEmail = email;
@@ -114,10 +137,9 @@ class LoginViewModel extends ChangeNotifier {
       _authMode = AuthMode.confirmSignUp;
     } else {
       final data = result.data;
-      _statusMessage =
-          (data is Map && data['error'] != null)
-              ? data['error'] as String
-              : result.message ?? 'Registrierung fehlgeschlagen.';
+      _statusMessage = (data is Map && data['error'] != null)
+          ? data['error'] as String
+          : result.message ?? 'Registrierung fehlgeschlagen.';
     }
 
     _isLoading = false;
@@ -133,14 +155,14 @@ class LoginViewModel extends ChangeNotifier {
     final result = await _apiService.confirmSignUp(email, confirmationCode);
 
     if (result.isSuccess) {
+      _isFirstLogin = true;
       _statusMessage = 'E-Mail bestätigt! Du kannst dich jetzt anmelden.';
       _authMode = AuthMode.signIn;
     } else {
       final data = result.data;
-      _statusMessage =
-          (data is Map && data['error'] != null)
-              ? data['error'] as String
-              : result.message ?? 'Bestätigung fehlgeschlagen.';
+      _statusMessage = (data is Map && data['error'] != null)
+          ? data['error'] as String
+          : result.message ?? 'Bestätigung fehlgeschlagen.';
     }
 
     _isLoading = false;
@@ -162,10 +184,9 @@ class LoginViewModel extends ChangeNotifier {
       _authMode = AuthMode.confirmForgotPassword;
     } else {
       final data = result.data;
-      _statusMessage =
-          (data is Map && data['error'] != null)
-              ? data['error'] as String
-              : result.message ?? 'Anfrage fehlgeschlagen.';
+      _statusMessage = (data is Map && data['error'] != null)
+          ? data['error'] as String
+          : result.message ?? 'Anfrage fehlgeschlagen.';
     }
 
     _isLoading = false;
@@ -194,10 +215,9 @@ class LoginViewModel extends ChangeNotifier {
       _authMode = AuthMode.signIn;
     } else {
       final data = result.data;
-      _statusMessage =
-          (data is Map && data['error'] != null)
-              ? data['error'] as String
-              : result.message ?? 'Passwort-Reset fehlgeschlagen.';
+      _statusMessage = (data is Map && data['error'] != null)
+          ? data['error'] as String
+          : result.message ?? 'Passwort-Reset fehlgeschlagen.';
     }
 
     _isLoading = false;
@@ -221,7 +241,14 @@ class LoginViewModel extends ChangeNotifier {
     // Try a silent refresh to validate that the refresh token is still good.
     final result = await _apiService.refreshTokens();
     if (result.isSuccess) {
-      _isAuthenticated = true;
+      // Verify the user profile still exists in DynamoDB.
+      final meResult = await _apiService.getMe();
+      if (meResult.isSuccess) {
+        _isAuthenticated = true;
+      } else {
+        // Profile was deleted – clear tokens and stay signed out.
+        await _apiService.authService.clearTokens();
+      }
       notifyListeners();
     } else {
       // Tokens are invalid – clear them.
