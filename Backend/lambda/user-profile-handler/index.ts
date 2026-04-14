@@ -648,12 +648,14 @@ async function handleRegister(
   const apiKey = getEnv('API_KEY');
   if (!apiKey) return missingEnvResponse('API_KEY');
 
-  // email is available in Cognito id token claims
+  // email and name are available in Cognito id token claims
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const email = (event.requestContext as any).authorizer?.jwt?.claims?.email as string | undefined;
+  const claims = (event.requestContext as any).authorizer?.jwt?.claims as Record<string, unknown> | undefined;
+  const email = claims?.email as string | undefined;
+  const nameFromClaims = claims?.name as string | undefined;
 
-  // Optional display name supplied in the body
-  let displayName: string | undefined;
+  // Optional display name: body takes precedence, JWT name claim is the fallback
+  let displayName: string | undefined = nameFromClaims;
   if (event.body) {
     try {
       const body = JSON.parse(event.body) as { displayName?: string };
@@ -747,7 +749,7 @@ async function handleRegister(
         `${platformBaseDomain}/register`,
         'POST',
         apiKey,
-        { platformUserId: userId, platformId: vendorId },
+        { platformUserId: userId, platformId: vendorId, ...(displayName ? { name: displayName } : {}) },
       );
 
       if (!registrationResponse.success || !registrationResponse.data?.safeWalkId) {

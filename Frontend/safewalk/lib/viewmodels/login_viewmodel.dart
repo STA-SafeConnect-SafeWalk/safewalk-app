@@ -47,6 +47,10 @@ class LoginViewModel extends ChangeNotifier {
   String _pendingEmail = '';
   String get pendingEmail => _pendingEmail;
 
+  /// Stores the display name entered during sign-up to be passed to [registerProfile]
+  /// on the first login after email confirmation.
+  String? _pendingDisplayName;
+
   /// Tracks whether the user just completed sign-up confirmation, so that
   /// the next [signIn] call creates the profile instead of just checking it.
   bool _isFirstLogin = false;
@@ -84,8 +88,9 @@ class LoginViewModel extends ChangeNotifier {
     if (result.isSuccess) {
       if (_isFirstLogin) {
         // First login after sign-up: create the profile in DynamoDB.
-        await _apiService.registerProfile();
+        await _apiService.registerProfile(displayName: _pendingDisplayName);
         _isFirstLogin = false;
+        _pendingDisplayName = null;
       } else {
         // Normal login: verify the user profile still exists.
         final meResult = await _apiService.getMe();
@@ -132,6 +137,7 @@ class LoginViewModel extends ChangeNotifier {
 
     if (result.isSuccess) {
       _pendingEmail = email;
+      _pendingDisplayName = displayName;
       _statusMessage =
           'Registrierung erfolgreich! Bitte prüfe deine E-Mails und gib den Bestätigungscode ein.';
       _authMode = AuthMode.confirmSignUp;

@@ -10,6 +10,7 @@ const docClient = DynamoDBDocumentClient.from(dynamoClient);
 interface PlatformRegistrationPayload {
   platformUserId: string;
   platformId: string;
+  name?: string;
 }
 
 interface SharingCodePayload {
@@ -94,6 +95,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   }
 
   let existingSafeWalkId: string | undefined;
+  let existingDisplayName: string | undefined;
   try {
     const existingUser = await docClient.send(
       new GetCommand({
@@ -103,6 +105,8 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
         },
       })
     );
+
+    existingDisplayName = existingUser.Item?.displayName as string | undefined;
 
     if (existingUser.Item?.sharingCode && existingUser.Item?.sharingCodeExpiresAt) {
       const expiresAt = new Date(existingUser.Item.sharingCodeExpiresAt as string);
@@ -139,6 +143,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       const registrationPayload: PlatformRegistrationPayload = {
         platformUserId: userId,
         platformId: platformId,
+        ...(existingDisplayName ? { name: existingDisplayName } : {}),
       };
 
       const registrationResponse = await sendRequest<PlatformRegistrationResponse>(
