@@ -45,7 +45,7 @@ interface PlatformContact {
   locationSharing: boolean;
   sosSharing: boolean;
   direction: 'outgoing' | 'incoming';
-  displayName?: string;
+  peerName?: string;
   webhookUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -117,7 +117,7 @@ function buildFrontendContacts(platformContacts: PlatformContact[]): FrontendCon
       contactId: representative.contactId,
       outgoingContactId: incoming?.contactId ?? null,
       safeWalkId: getPartnerSafeWalkId(representative),
-      displayName: representative.displayName ?? 'Unbenannte Kontaktperson',
+      displayName: representative.peerName ?? 'Unbenannte Kontaktperson',
       isOutgoing: !!incoming,
       locationSharing: incoming?.locationSharing ?? false,
       sosSharing: incoming?.sosSharing ?? false,
