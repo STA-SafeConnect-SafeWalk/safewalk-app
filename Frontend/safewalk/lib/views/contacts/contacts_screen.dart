@@ -158,7 +158,7 @@ class _ContactsView extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Kontakt entfernen'),
         content: Text(
-          '${contact.displayName} wirklich als Bezugsperson entfernen?',
+          '${contact.displayName} wirklich als Bezugsperson entfernen? Dies entfernt beidseitig das Teilen.',
         ),
         actions: [
           TextButton(
