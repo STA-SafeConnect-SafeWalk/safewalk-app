@@ -288,7 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return TextField(
       controller: _displayNameController,
       decoration: const InputDecoration(
-        labelText: 'Anzeigename (optional)',
+        labelText: 'Anzeigename',
         border: OutlineInputBorder(),
         prefixIcon: Icon(Icons.person),
       ),
@@ -333,12 +333,20 @@ class _LoginScreenState extends State<LoginScreen> {
         break;
 
       case AuthMode.signUp:
+        final displayName = _displayNameController.text.trim();
+        if (displayName.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bitte gib einen Anzeigenamen ein.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+          return;
+        }
         vm.signUp(
           _emailController.text.trim(),
           _passwordController.text,
-          displayName: _displayNameController.text.trim().isNotEmpty
-              ? _displayNameController.text.trim()
-              : null,
+          displayName: displayName,
         );
         break;
 
