@@ -1,16 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:safewalk/firebase_options.dart';
 import 'package:safewalk/services/api_service.dart';
 
-/// Handles Firebase Cloud Messaging (FCM) setup and device-token registration
-/// with the SafeWalk backend (which uses Amazon SNS for delivery).
-///
-/// Lifecycle:
-///   1. [init] – called once at app start (initialises Firebase + FCM).
-///   2. [registerDevice] – called after successful sign-in.
-///   3. [unregisterDevice] – called on sign-out.
 class PushNotificationService {
   final ApiService _apiService;
 
@@ -18,12 +12,21 @@ class PushNotificationService {
   String? _currentToken;
   Future<bool>? _initFuture;
 
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+
+  static const _androidChannel = AndroidNotificationChannel(
+    'safewalk_push',
+    'SafeWalk Notifications',
+    description: 'Push notifications from SafeWalk',
+    importance: Importance.high,
+  );
+
   PushNotificationService({required ApiService apiService})
       : _apiService = apiService;
 
-  /// Initialise Firebase and set up foreground message handling.
-  /// Returns `true` if initialisation succeeded.
-  /// Safe to call multiple times — subsequent calls return the same future.
+  String? get currentToken => _currentToken;
+
   Future<bool> init() {
     _initFuture ??= _doInit();
     return _initFuture!;
@@ -31,12 +34,13 @@ class PushNotificationService {
 
   Future<bool> _doInit() async {
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
       _messaging = FirebaseMessaging.instance;
 
-      // Request permission (required on iOS / web).
       final settings = await _messaging!.requestPermission(
         alert: true,
         badge: true,
@@ -48,16 +52,20 @@ class PushNotificationService {
         return false;
       }
 
-      // Listen for foreground messages.
       FirebaseMessaging.onMessage.listen(_onForegroundMessage);
-
-      // Listen for token refresh so we can re-register.
       _messaging!.onTokenRefresh.listen(_onTokenRefresh);
+      await _initLocalNotifications();
+
+      await _messaging!.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
       debugPrint('[Push] Firebase initialised successfully.');
       return true;
     } catch (e) {
-      debugPrint('[Push] Firebase init failed (expected until configured): $e');
+      debugPrint('[Push] Firebase init failed: $e');
       return false;
     }
   }
@@ -65,16 +73,14 @@ class PushNotificationService {
   /// Retrieves the FCM token and registers it with the backend.
   /// Call after the user has signed in.
   Future<void> registerDevice() async {
-    debugPrint('[Push] registerDevice called, awaiting init...');
-    // Ensure Firebase is ready before trying to get a token.
     await init();
-    if (_messaging == null) {
-      debugPrint('[Push] registerDevice aborted: _messaging is null.');
-      return;
-    }
+    if (_messaging == null) return;
 
     try {
-      // For web, pass the VAPID key if available.
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await _waitForApnsToken();
+      }
+
       final token = await _messaging!.getToken(
         vapidKey: DefaultFirebaseOptions.vapidKey,
       );
@@ -117,17 +123,61 @@ class PushNotificationService {
     _currentToken = null;
   }
 
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
+  Future<void> _initLocalNotifications() async {
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const darwinInit = DarwinInitializationSettings();
+    const initSettings = InitializationSettings(
+      android: androidInit,
+      iOS: darwinInit,
+    );
+    await _localNotifications.initialize(initSettings);
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_androidChannel);
+  }
+
+  Future<void> _waitForApnsToken() async {
+    const maxAttempts = 20;
+    for (var i = 0; i < maxAttempts; i++) {
+      final apnsToken = await _messaging!.getAPNSToken();
+      if (apnsToken != null) {
+        debugPrint('[Push] APNs token available after ${i * 500}ms.');
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    debugPrint('[Push] APNs token not available after 10s, proceeding anyway.');
+  }
 
   void _onForegroundMessage(RemoteMessage message) {
-    debugPrint('[Push] Foreground message: ${message.notification?.title}');
-    // TODO: Show an in-app notification banner / snackbar.
+    final notification = message.notification;
+    if (notification == null) return;
+
+    _localNotifications.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _androidChannel.id,
+          _androidChannel.name,
+          channelDescription: _androidChannel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+    );
   }
 
   Future<void> _onTokenRefresh(String newToken) async {
-    debugPrint('[Push] Token refreshed, re-registering…');
     _currentToken = newToken;
     await registerDevice();
   }

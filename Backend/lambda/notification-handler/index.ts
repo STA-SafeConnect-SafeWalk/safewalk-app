@@ -27,10 +27,6 @@ const sns = new SNSClient({});
 const TABLE_NAME = process.env.DEVICE_TOKENS_TABLE!;
 const FCM_PLATFORM_APP_ARN = process.env.FCM_PLATFORM_APP_ARN || '';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const json = (statusCode: number, body: Record<string, unknown>): Result => ({
   statusCode,
   headers: { 'Content-Type': 'application/json' },
@@ -44,10 +40,6 @@ const parseBody = (event: Event): Record<string, unknown> => {
     return {};
   }
 };
-
-// ---------------------------------------------------------------------------
-// Handler
-// ---------------------------------------------------------------------------
 
 export const handler = async (event: Event): Promise<Result> => {
   const method = event.requestContext.http.method;
@@ -73,12 +65,6 @@ export const handler = async (event: Event): Promise<Result> => {
   }
 };
 
-// ---------------------------------------------------------------------------
-// POST /device/register
-// Body: { deviceToken: string, platform: 'android' | 'ios' | 'web' }
-// Creates an SNS platform endpoint and stores the user–device mapping.
-// ---------------------------------------------------------------------------
-
 async function registerDevice(userId: string, event: Event): Promise<Result> {
   const body = parseBody(event);
   const deviceToken = body.deviceToken as string | undefined;
@@ -89,13 +75,9 @@ async function registerDevice(userId: string, event: Event): Promise<Result> {
   }
 
   if (!FCM_PLATFORM_APP_ARN) {
-    return json(503, {
-      message:
-        'Push notifications are not configured yet. FCM Platform Application ARN is missing.',
-    });
+    return json(503, { message: 'FCM Platform Application ARN is not configured' });
   }
 
-  // Create (or retrieve existing) SNS platform endpoint for this token.
   const endpointResponse = await sns.send(
     new CreatePlatformEndpointCommand({
       PlatformApplicationArn: FCM_PLATFORM_APP_ARN,
@@ -106,7 +88,6 @@ async function registerDevice(userId: string, event: Event): Promise<Result> {
 
   const endpointArn = endpointResponse.EndpointArn!;
 
-  // Ensure the endpoint is enabled and the token is current.
   await sns.send(
     new SetEndpointAttributesCommand({
       EndpointArn: endpointArn,
@@ -133,12 +114,6 @@ async function registerDevice(userId: string, event: Event): Promise<Result> {
   return json(200, { message: 'Device registered', endpointArn });
 }
 
-// ---------------------------------------------------------------------------
-// POST /device/unregister
-// Body: { deviceToken: string }
-// Removes the SNS endpoint and deletes the DynamoDB record.
-// ---------------------------------------------------------------------------
-
 async function unregisterDevice(
   userId: string,
   event: Event,
@@ -150,7 +125,6 @@ async function unregisterDevice(
     return json(400, { message: 'deviceToken is required' });
   }
 
-  // Look up the endpoint ARN so we can delete it from SNS.
   const record = await ddb.send(
     new GetCommand({
       TableName: TABLE_NAME,
@@ -168,7 +142,6 @@ async function unregisterDevice(
     }
   }
 
-  // Remove from DynamoDB regardless.
   await ddb.send(
     new DeleteCommand({
       TableName: TABLE_NAME,
@@ -176,16 +149,8 @@ async function unregisterDevice(
     }),
   );
 
-  console.log('Device unregistered for user:', userId);
-
   return json(200, { message: 'Device unregistered' });
 }
-
-// ---------------------------------------------------------------------------
-// POST /notifications/send
-// Body: { targetUserId: string, title: string, body: string, data?: object }
-// Sends a push notification to all devices registered by the target user.
-// ---------------------------------------------------------------------------
 
 async function sendNotification(
   _senderId: string,
@@ -203,7 +168,6 @@ async function sendNotification(
     });
   }
 
-  // Fetch all device endpoints for the target user.
   const devices = await ddb.send(
     new QueryCommand({
       TableName: TABLE_NAME,
@@ -216,7 +180,6 @@ async function sendNotification(
     return json(404, { message: 'No registered devices for target user' });
   }
 
-  // Publish to each endpoint via SNS.
   const results = await Promise.allSettled(
     devices.Items.map(async (device) => {
       const payload = JSON.stringify({

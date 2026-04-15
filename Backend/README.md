@@ -28,8 +28,9 @@ Vollständige API-Referenz für Frontend-Entwickler. Beschreibt alle Endpunkte, 
    - [GET /contacts](#get-contacts)
    - [PATCH /contacts/{contactId}](#patch-contactscontactid)
    - [DELETE /contacts/{contactId}](#delete-contactscontactid)
-7. [Fehler-Responses](#fehler-responses)
-8. [Beispiel-Flow (Komplett)](#beispiel-flow-komplett)
+7. [Push-Benachrichtigungen (Backend-intern)](#push-benachrichtigungen-backend-intern)
+8. [Fehler-Responses](#fehler-responses)
+9. [Beispiel-Flow (Komplett)](#beispiel-flow-komplett)
 
 ---
 
@@ -42,7 +43,10 @@ Vollständige API-Referenz für Frontend-Entwickler. Beschreibt alle Endpunkte, 
 | **Auth Handler Lambda** | Verarbeitet alle `/auth/*`-Endpunkte (Sign-up, Sign-in, etc.). |
 | **User Profile Handler Lambda** | Verarbeitet Benutzerprofil, Sharing Codes und Kontakte. |
 | **Platform Registration Handler Lambda** | Registriert Benutzer bei der externen SafeWalk-Plattform. |
+| **Notification Handler Lambda** | Verwaltet Geräte-Tokens und versendet Push-Benachrichtigungen via Amazon SNS. |
 | **DynamoDB (AppUsers)** | Speichert Benutzerprofile, `safeWalkId` und Sharing Codes. |
+| **DynamoDB (DeviceTokens)** | Speichert FCM-Geräte-Tokens pro Benutzer (für Push-Benachrichtigungen). |
+| **Amazon SNS** | Zustellung von Push-Benachrichtigungen über Firebase Cloud Messaging (FCM v1). |
 
 ---
 
@@ -857,6 +861,95 @@ Kein Body erforderlich.
 | `400` | Benutzer ist noch nicht auf der Plattform registriert |
 | `401` | Kein oder ungültiger Token |
 | `502` | Plattform hat die Löschung abgelehnt |
+
+---
+
+## Push-Benachrichtigungen (Backend-intern)
+
+Push-Benachrichtigungen werden über **Amazon SNS** zugestellt. Das Frontend registriert Geräte via API, aber das **Versenden von Benachrichtigungen ist eine rein serverseitige Operation** – kein API-Aufruf durch den Benutzer nötig.
+
+### Infrastruktur
+
+| Komponente | Beschreibung |
+|---|---|
+| **DynamoDB DeviceTokens** | Speichert Mappings `userId → deviceToken → SNS EndpointArn`. Benutzer können mehrere Geräte haben. |
+| **Amazon SNS Platform Application** | FCM v1-Integration, konfiguriert mit einem Firebase Service Account. ARN wird als `FCM_PLATFORM_APP_ARN` an die Notification-Lambda übergeben. |
+| **Notification Handler Lambda** | Verwaltet Device-Registrierungen und kann Benachrichtigungen an alle Geräte eines Benutzers senden. |
+
+### Notification Handler Lambda direkt aufrufen
+
+Andere Lambdas (z. B. eine SOS-Lambda oder Event-Trigger) können die Notification Handler Lambda direkt über das **AWS SDK** aufrufen – kein HTTP-Request, kein Token nötig.
+
+```typescript
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
+
+const lambda = new LambdaClient({});
+
+await lambda.send(new InvokeCommand({
+  FunctionName: 'notification-handler',
+  InvocationType: 'Event', // asynchron, kein Warten auf Antwort
+  Payload: JSON.stringify({
+    action: 'send',
+    targetUserId: '<cognito-user-sub>',
+    title: 'SOS-Alarm',
+    body: 'Max Mustermann hat einen SOS-Alarm ausgelöst.',
+    data: { type: 'sos', userId: '<cognito-user-sub>' },
+  }),
+}));
+```
+
+> **Hinweis:** Damit eine Lambda die Notification-Lambda aufrufen kann, muss sie die IAM-Berechtigung `lambda:InvokeFunction` auf die `notification-handler`-Funktion haben.
+
+### Amazon SNS direkt aufrufen
+
+Alternativ kann eine Lambda auch direkt SNS nutzen, ohne den Notification Handler. Der SNS-Endpunkt-ARN muss dafür zunächst aus der `DeviceTokens`-DynamoDB-Tabelle abgerufen werden.
+
+```typescript
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+
+const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const sns = new SNSClient({});
+
+const { Items } = await ddb.send(new QueryCommand({
+  TableName: 'DeviceTokens',
+  KeyConditionExpression: 'userId = :uid',
+  ExpressionAttributeValues: { ':uid': targetUserId },
+}));
+
+await Promise.allSettled(Items!.map(device =>
+  sns.send(new PublishCommand({
+    TargetArn: device.endpointArn as string,
+    Message: JSON.stringify({
+      GCM: JSON.stringify({
+        notification: { title, body },
+        data: { type: 'sos' },
+      }),
+    }),
+    MessageStructure: 'json',
+  }))
+));
+```
+
+**Erforderliche IAM-Berechtigungen** für die sendende Lambda:
+```json
+{
+  "Effect": "Allow",
+  "Action": ["sns:Publish"],
+  "Resource": "*"
+}
+```
+Zusätzlich `dynamodb:Query` auf die `DeviceTokens`-Tabelle.
+
+### Geräte-Endpunkte (diese werden durch das Frontend genutzt)
+
+Diese Endpunkte werden automatisch vom Flutter-App-Client aufgerufen, wenn sich ein Benutzer einloggt oder ausloggt. Sie müssen nicht manuell integriert werden.
+
+| Methode | Pfad | Beschreibung |
+|---|---|---|
+| `POST` | `/device/register` | Registriert den FCM-Token des aktuellen Geräts |
+| `POST` | `/device/unregister` | Entfernt den FCM-Token des aktuellen Geräts |
 
 ---
 

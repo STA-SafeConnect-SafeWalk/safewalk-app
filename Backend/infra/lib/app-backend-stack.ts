@@ -45,8 +45,6 @@ export class AppBackendStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
-    /******** DEVICE TOKENS TABLE (push notifications) ********/
-
     const deviceTokensTable = new dynamodb.Table(this, 'device-tokens-table', {
       tableName: 'DeviceTokens',
       partitionKey: {
@@ -61,15 +59,6 @@ export class AppBackendStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    /******** SNS PLATFORM APPLICATION (FCM v1 – Custom Resource) ********/
-
-    // Reads the Firebase service account key from a local JSON file.
-    // Place the file at Backend/infra/fcm-service-account.json before deploying.
-    // Get it from: Firebase Console → Project Settings → Service accounts →
-    //              Generate new private key.
-    //
-    // If the file is missing, push notifications won't work but the rest of
-    // the stack deploys fine.
     const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
     const hasFcmKey = fs.existsSync(fcmKeyPath);
     let fcmPlatformAppArn = '';
@@ -214,8 +203,6 @@ export class AppBackendStack extends cdk.Stack {
       }),
     );
 
-    /******** NOTIFICATION HANDLER ********/
-
     const notificationHandler = new NodejsFunction(this, 'notification-handler', {
       functionName: 'notification-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -232,7 +219,6 @@ export class AppBackendStack extends cdk.Stack {
 
     deviceTokensTable.grantReadWriteData(notificationHandler);
 
-    // SNS permissions: create/delete endpoints + publish
     notificationHandler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [

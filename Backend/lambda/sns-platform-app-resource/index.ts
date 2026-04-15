@@ -1,7 +1,3 @@
-// Custom Resource handler for managing an SNS Platform Application.
-// CloudFormation does not support AWS::SNS::PlatformApplication natively,
-// so this Lambda bridges the gap to make it fully automated via CDK.
-
 import {
   CloudFormationCustomResourceEvent,
   CloudFormationCustomResourceResponse,
@@ -39,7 +35,6 @@ export const handler = async (
       }
 
       case 'Update': {
-        // Use the existing ARN from the previous create, update its credentials.
         const existingArn = event.PhysicalResourceId;
         await sns.send(
           new SetPlatformApplicationAttributesCommand({
@@ -63,7 +58,6 @@ export const handler = async (
           );
           console.log('Deleted:', arn);
         } catch (err) {
-          // Best effort — don't fail the stack delete if it's already gone.
           console.warn('Delete failed (non-fatal):', err);
         }
         return respond(event, 'SUCCESS', arn);

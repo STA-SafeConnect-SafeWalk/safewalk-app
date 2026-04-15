@@ -1,8 +1,3 @@
-// SettingsScreen allows the user to manage their account and app preferences.
-//
-// Currently provides a sign-out button. Will eventually include notifications,
-// appearance, account details, and other preferences.
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:safewalk/viewmodels/login_viewmodel.dart';

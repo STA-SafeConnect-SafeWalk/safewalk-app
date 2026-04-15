@@ -1,24 +1,12 @@
-// ============================================================================
-// Firebase configuration for SafeWalk.
-//
-// IMPORTANT: Replace the placeholder values below with your real Firebase
-// project configuration. You can get these from the Firebase Console:
-//   1. Go to https://console.firebase.google.com
-//   2. Create a project (or use an existing one).
-//   3. Add a Web app → copy the config object values here.
-//   4. Enable Cloud Messaging in Project Settings → Cloud Messaging.
-//
-// Alternatively, run `flutterfire configure` to auto-generate this file.
-// ============================================================================
-
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 class DefaultFirebaseOptions {
-  /// VAPID key for web push (from Firebase Console → Cloud Messaging → Web Push certificates).
-  /// Set to `null` until configured.
-  static const String? vapidKey = 'BCfUrdRW9pnshoQ2sdr90_VKbPLNMm2vklCeFRNCmoEIcwUZlMJLXb9FF6qC4c2YT5IGbBbzWUjSqHyg2cV_bRA';
+  static const String _vapidKeyRaw =
+      String.fromEnvironment('FIREBASE_VAPID_KEY');
+
+  static String? get vapidKey => _vapidKeyRaw.isEmpty ? null : _vapidKeyRaw;
 
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) return web;
@@ -32,45 +20,30 @@ class DefaultFirebaseOptions {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Web – replace with values from Firebase Console
-
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAzxr1hhh-d11WM8AJ7-ZDQSvBXlIRyQLo',
-    appId: '1:188485248388:web:0d90c579ae97744da5e9d1',
-    messagingSenderId: '188485248388',
-    projectId: 'safewalk-backend-sns',
-    authDomain: 'safewalk-backend-sns.firebaseapp.com',
-    storageBucket: 'safewalk-backend-sns.firebasestorage.app',
-    measurementId: 'G-BH29G0MRQN',
+  static const web = FirebaseOptions(
+    apiKey: String.fromEnvironment('FIREBASE_WEB_API_KEY'),
+    appId: String.fromEnvironment('FIREBASE_WEB_APP_ID'),
+    messagingSenderId: String.fromEnvironment('FIREBASE_SENDER_ID'),
+    projectId: String.fromEnvironment('FIREBASE_PROJECT_ID'),
+    authDomain: String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
+    storageBucket: String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
+    measurementId: String.fromEnvironment('FIREBASE_MEASUREMENT_ID'),
   );
 
-  // ---------------------------------------------------------------------------
-
-  // ---------------------------------------------------------------------------
-  // Android – replace after running `flutterfire configure`
-
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyB_FzVnZcx3X1D6ycgwUqMr8dHx5e1quu4',
-    appId: '1:188485248388:android:94e40e5cfc2432e1a5e9d1',
-    messagingSenderId: '188485248388',
-    projectId: 'safewalk-backend-sns',
-    storageBucket: 'safewalk-backend-sns.firebasestorage.app',
+  static const android = FirebaseOptions(
+    apiKey: String.fromEnvironment('FIREBASE_ANDROID_API_KEY'),
+    appId: String.fromEnvironment('FIREBASE_ANDROID_APP_ID'),
+    messagingSenderId: String.fromEnvironment('FIREBASE_SENDER_ID'),
+    projectId: String.fromEnvironment('FIREBASE_PROJECT_ID'),
+    storageBucket: String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
   );
 
-  // ---------------------------------------------------------------------------
-
-  // ---------------------------------------------------------------------------
-  // iOS – replace after running `flutterfire configure`
-
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBf73BwjnKjYZlxdCU_-4I-e2NpC1LjyD0',
-    appId: '1:188485248388:ios:59130ef3941925aca5e9d1',
-    messagingSenderId: '188485248388',
-    projectId: 'safewalk-backend-sns',
-    storageBucket: 'safewalk-backend-sns.firebasestorage.app',
-    iosBundleId: 'com.example.safewalk',
+  static const ios = FirebaseOptions(
+    apiKey: String.fromEnvironment('FIREBASE_IOS_API_KEY'),
+    appId: String.fromEnvironment('FIREBASE_IOS_APP_ID'),
+    messagingSenderId: String.fromEnvironment('FIREBASE_SENDER_ID'),
+    projectId: String.fromEnvironment('FIREBASE_PROJECT_ID'),
+    storageBucket: String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
+    iosBundleId: String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID'),
   );
-
-  // ---------------------------------------------------------------------------
 }
