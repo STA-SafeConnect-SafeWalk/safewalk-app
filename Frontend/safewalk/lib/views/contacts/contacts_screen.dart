@@ -130,9 +130,7 @@ class _ContactsView extends StatelessWidget {
                             onToggleSOS: () => vm.toggleSosSharing(c.contactId),
                             onDelete: () => _confirmDelete(context, vm, c),
                             onAddSharing: () {
-                              if (!vm.isSharingPanelOpen) {
-                                vm.toggleSharingPanel();
-                              }
+                              vm.connectBackToContact(c.safeWalkId);
                             },
                           ),
                         ),

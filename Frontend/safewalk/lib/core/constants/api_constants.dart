@@ -58,6 +58,9 @@ class ApiConstants {
   /// POST – Connect with a friend using their sharing code.
   static const String sharingCodeConnect = '/sharing-code/connect';
 
+  /// POST – Add a contact back without sharing a code.
+  static const String contactsConnectBack = '/contacts/connect-back';
+
   /// GET – List all trusted contacts.
   static const String contacts = '/contacts';
 
