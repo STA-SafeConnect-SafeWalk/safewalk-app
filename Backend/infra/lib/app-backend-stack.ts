@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -9,6 +10,7 @@ import * as apigatewayAuthorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers
 import * as apigatewayIntegrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { Construct } from 'constructs';
 import * as path from 'path';
+import * as fs from 'fs';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 
 export class AppBackendStack extends cdk.Stack {
@@ -59,26 +61,59 @@ export class AppBackendStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    /******** SNS PLATFORM APPLICATION (FCM) ********/
+    /******** SNS PLATFORM APPLICATION (FCM v1 – Custom Resource) ********/
 
-    // Provide FCM_SERVER_KEY env var at deploy time.
-    // Without it the platform application is skipped and push won't work,
-    // but the rest of the stack deploys fine.
-    const fcmServerKey = process.env.FCM_SERVER_KEY;
+    // Reads the Firebase service account key from a local JSON file.
+    // Place the file at Backend/infra/fcm-service-account.json before deploying.
+    // Get it from: Firebase Console → Project Settings → Service accounts →
+    //              Generate new private key.
+    //
+    // If the file is missing, push notifications won't work but the rest of
+    // the stack deploys fine.
+    const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
+    const hasFcmKey = fs.existsSync(fcmKeyPath);
     let fcmPlatformAppArn = '';
 
-    if (fcmServerKey) {
-      const fcmPlatformApp = new cdk.CfnResource(this, 'fcm-platform-app', {
-        type: 'AWS::SNS::PlatformApplication',
+    if (hasFcmKey) {
+      const fcmServiceAccountJson = fs.readFileSync(fcmKeyPath, 'utf-8');
+
+      const snsPlatformAppHandler = new NodejsFunction(this, 'sns-platform-app-resource', {
+        functionName: 'sns-platform-app-resource',
+        runtime: lambda.Runtime.NODEJS_24_X,
+        handler: 'index.handler',
+        entry: path.join(__dirname, '../../lambda/sns-platform-app-resource/index.ts'),
+        timeout: cdk.Duration.seconds(30),
+        memorySize: 128,
+        logRetention: logs.RetentionDays.ONE_WEEK,
+      });
+
+      snsPlatformAppHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            'sns:CreatePlatformApplication',
+            'sns:DeletePlatformApplication',
+            'sns:SetPlatformApplicationAttributes',
+            'sns:GetPlatformApplicationAttributes',
+          ],
+          resources: ['*'],
+        }),
+      );
+
+      const snsPlatformAppProvider = new cr.Provider(this, 'sns-platform-app-provider', {
+        onEventHandler: snsPlatformAppHandler,
+        logRetention: logs.RetentionDays.ONE_WEEK,
+      });
+
+      const snsPlatformApp = new cdk.CustomResource(this, 'fcm-platform-app', {
+        serviceToken: snsPlatformAppProvider.serviceToken,
         properties: {
           Name: 'safewalk-fcm',
           Platform: 'GCM',
-          Attributes: {
-            PlatformCredential: fcmServerKey,
-          },
+          PlatformCredential: fcmServiceAccountJson,
         },
       });
-      fcmPlatformAppArn = fcmPlatformApp.ref;
+
+      fcmPlatformAppArn = snsPlatformApp.getAttString('PlatformApplicationArn');
     }
 
     const userPool = new cognito.UserPool(this, 'safewalk-user-pool', {

@@ -16,13 +16,20 @@ class PushNotificationService {
 
   FirebaseMessaging? _messaging;
   String? _currentToken;
+  Future<bool>? _initFuture;
 
   PushNotificationService({required ApiService apiService})
       : _apiService = apiService;
 
   /// Initialise Firebase and set up foreground message handling.
   /// Returns `true` if initialisation succeeded.
-  Future<bool> init() async {
+  /// Safe to call multiple times — subsequent calls return the same future.
+  Future<bool> init() {
+    _initFuture ??= _doInit();
+    return _initFuture!;
+  }
+
+  Future<bool> _doInit() async {
     try {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
@@ -58,7 +65,13 @@ class PushNotificationService {
   /// Retrieves the FCM token and registers it with the backend.
   /// Call after the user has signed in.
   Future<void> registerDevice() async {
-    if (_messaging == null) return;
+    debugPrint('[Push] registerDevice called, awaiting init...');
+    // Ensure Firebase is ready before trying to get a token.
+    await init();
+    if (_messaging == null) {
+      debugPrint('[Push] registerDevice aborted: _messaging is null.');
+      return;
+    }
 
     try {
       // For web, pass the VAPID key if available.

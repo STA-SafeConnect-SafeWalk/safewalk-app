@@ -154,7 +154,7 @@ Erstellt ein neues Benutzerkonto. Cognito sendet automatisch einen Bestätigungs
 |---|---|---|---|
 | `email` | `string` | ✅ | E-Mail-Adresse (wird als Username verwendet) |
 | `password` | `string` | ✅ | Passwort (siehe Passwort-Anforderungen) |
-| `displayName` | `string` | ❌ | Anzeigename des Benutzers |
+| `displayName` | `string` | ✅ | Anzeigename des Benutzers |
 
 ```json
 {

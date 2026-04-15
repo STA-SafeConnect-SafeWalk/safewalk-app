@@ -18,7 +18,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   /// VAPID key for web push (from Firebase Console → Cloud Messaging → Web Push certificates).
   /// Set to `null` until configured.
-  static const String? vapidKey = ' BCfUrdRW9pnshoQ2sdr90_VKbPLNMm2vklCeFRNCmoEIcwUZlMJLXb9FF6qC4c2YT5IGbBbzWUjSqHyg2cV_bRA';
+  static const String? vapidKey = 'BCfUrdRW9pnshoQ2sdr90_VKbPLNMm2vklCeFRNCmoEIcwUZlMJLXb9FF6qC4c2YT5IGbBbzWUjSqHyg2cV_bRA';
 
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) return web;
