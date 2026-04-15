@@ -290,6 +290,16 @@ class ApiService {
     );
   }
 
+  /// Adds a contact back using their SafeWalk ID without a sharing code.
+  Future<ApiResult> connectBackWithContact(String peerSafeWalkId) async {
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.contactsConnectBack,
+        body: {'peerSafeWalkId': peerSafeWalkId},
+      ),
+    );
+  }
+
   /// Fetches all trusted contacts for the logged-in user.
   Future<ApiResult> getContacts() async {
     return _authenticatedRequest(() => _client.get(ApiConstants.contacts));

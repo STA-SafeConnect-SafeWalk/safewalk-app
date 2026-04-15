@@ -271,6 +271,13 @@ export class AppBackendStack extends cdk.Stack {
       authorizer: jwtAuthorizer,
     });
 
+    httpApi.addRoutes({
+      path: '/contacts/connect-back',
+      methods: [apigateway.HttpMethod.POST],
+      integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
     /* Trusted Contacts Routes */
 
     httpApi.addRoutes({

@@ -11,6 +11,10 @@ interface ConnectWithCodeRequest {
   sharingCode: string;
 }
 
+interface ConnectBackRequest {
+  peerSafeWalkId: string;
+}
+
 interface PlatformSharingCodePayload {
   safeWalkId: string;
 }
@@ -29,6 +33,11 @@ interface PlatformSharingCodeResponse {
 interface PlatformTrustedContactPayload {
   requesterSafeWalkId: string;
   sharingCode: string;
+}
+
+interface PlatformConnectBackPayload {
+  requesterSafeWalkId: string;
+  targetSafeWalkId: string;
 }
 
 interface PlatformTrustedContactResponse {
@@ -204,6 +213,9 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
 
     case 'POST /sharing-code/connect':
       return handleConnectWithCode(event, tableName);
+
+    case 'POST /contacts/connect-back':
+      return handleConnectBack(event, tableName);
 
     case 'GET /contacts':
       return handleListContacts(event, tableName);
@@ -430,6 +442,80 @@ async function handleConnectWithCode(
     console.error('Error registering as trusted contact:', error);
     return jsonResponse(502, {
       error: 'Failed to register as trusted contact',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
+async function handleConnectBack(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  if (!platformBaseDomain) return missingEnvResponse('PLATFORM_DOMAIN');
+
+  const apiKey = getEnv('API_KEY');
+  if (!apiKey) return missingEnvResponse('API_KEY');
+
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  let requestBody: ConnectBackRequest;
+  try {
+    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    requestBody = JSON.parse(event.body) as ConnectBackRequest;
+  } catch {
+    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+  }
+
+  if (!requestBody.peerSafeWalkId || typeof requestBody.peerSafeWalkId !== 'string') {
+    return jsonResponse(400, { error: 'peerSafeWalkId is required and must be a string' });
+  }
+
+  let thisUserSafeWalkId: string;
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+
+    if (!result.Item?.safeWalkId) {
+      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+    }
+
+    thisUserSafeWalkId = result.Item.safeWalkId as string;
+  } catch (error) {
+    console.error('Error retrieving user:', error);
+    return jsonResponse(500, {
+      error: 'Failed to retrieve user data',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  const trustedContactsUrl = `${platformBaseDomain}/contacts`;
+  const payload: PlatformConnectBackPayload = {
+    requesterSafeWalkId: requestBody.peerSafeWalkId,
+    targetSafeWalkId: thisUserSafeWalkId,
+  };
+
+  try {
+    const platformResponse = await sendRequest<PlatformTrustedContactResponse>(
+      trustedContactsUrl,
+      'POST',
+      apiKey,
+      payload,
+    );
+
+    if (!platformResponse.success) {
+      console.error('Platform rejected reverse trusted contact registration:', platformResponse);
+      return jsonResponse(502, { error: 'Platform rejected reverse trusted contact registration' });
+    }
+
+    console.log('Successfully added reverse trusted contact for user:', userId);
+    return jsonResponse(200, { message: 'Successfully added trusted contact from incoming share' });
+  } catch (error) {
+    console.error('Error adding reverse trusted contact:', error);
+    return jsonResponse(502, {
+      error: 'Failed to add trusted contact from incoming share',
       details: error instanceof Error ? error.message : 'Unknown error',
     });
   }

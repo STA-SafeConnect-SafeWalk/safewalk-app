@@ -305,6 +305,30 @@ class ContactsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─── POST /contacts/connect-back ────────────────────────────────────
+
+  Future<void> connectBackToContact(String peerSafeWalkId) async {
+    _isConnecting = true;
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _apiService.connectBackWithContact(peerSafeWalkId);
+      if (result.isSuccess) {
+        _successMessage = 'Kontakt wurde ebenfalls zum Teilen hinzugefügt!';
+        await fetchContacts();
+      } else {
+        _errorMessage = _extractError(result.data, result.message);
+      }
+    } catch (e) {
+      _errorMessage = 'Verbindung zum Zurück-Teilen fehlgeschlagen: $e';
+    }
+
+    _isConnecting = false;
+    notifyListeners();
+  }
+
   // ─── Helper ──────────────────────────────────────────────────────────
 
   /// Extracts a user-friendly error string from the backend response.
