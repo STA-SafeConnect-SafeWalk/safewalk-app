@@ -43,6 +43,44 @@ export class AppBackendStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    /******** DEVICE TOKENS TABLE (push notifications) ********/
+
+    const deviceTokensTable = new dynamodb.Table(this, 'device-tokens-table', {
+      tableName: 'DeviceTokens',
+      partitionKey: {
+        name: 'userId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'deviceToken',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    /******** SNS PLATFORM APPLICATION (FCM) ********/
+
+    // Provide FCM_SERVER_KEY env var at deploy time.
+    // Without it the platform application is skipped and push won't work,
+    // but the rest of the stack deploys fine.
+    const fcmServerKey = process.env.FCM_SERVER_KEY;
+    let fcmPlatformAppArn = '';
+
+    if (fcmServerKey) {
+      const fcmPlatformApp = new cdk.CfnResource(this, 'fcm-platform-app', {
+        type: 'AWS::SNS::PlatformApplication',
+        properties: {
+          Name: 'safewalk-fcm',
+          Platform: 'GCM',
+          Attributes: {
+            PlatformCredential: fcmServerKey,
+          },
+        },
+      });
+      fcmPlatformAppArn = fcmPlatformApp.ref;
+    }
+
     const userPool = new cognito.UserPool(this, 'safewalk-user-pool', {
       userPoolName: 'safewalk-user-pool',
       selfSignUpEnabled: true,
@@ -141,6 +179,38 @@ export class AppBackendStack extends cdk.Stack {
       }),
     );
 
+    /******** NOTIFICATION HANDLER ********/
+
+    const notificationHandler = new NodejsFunction(this, 'notification-handler', {
+      functionName: 'notification-handler',
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: 'index.handler',
+      entry: path.join(__dirname, '../../lambda/notification-handler/index.ts'),
+      environment: {
+        DEVICE_TOKENS_TABLE: deviceTokensTable.tableName,
+        FCM_PLATFORM_APP_ARN: fcmPlatformAppArn,
+      },
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+    });
+
+    deviceTokensTable.grantReadWriteData(notificationHandler);
+
+    // SNS permissions: create/delete endpoints + publish
+    notificationHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'sns:CreatePlatformEndpoint',
+          'sns:DeleteEndpoint',
+          'sns:Publish',
+          'sns:GetEndpointAttributes',
+          'sns:SetEndpointAttributes',
+        ],
+        resources: ['*'],
+      }),
+    );
+
     /******** API GATEWAY ********/
 
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
@@ -181,6 +251,11 @@ export class AppBackendStack extends cdk.Stack {
     const platformLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'platform-registration-integration',
       platformRegistrationHandler
+    );
+
+    const notificationLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'notification-integration',
+      notificationHandler,
     );
 
     /* API Routes – public (no authorizer) */
@@ -298,6 +373,29 @@ export class AppBackendStack extends cdk.Stack {
       path: '/contacts/{contactId}',
       methods: [apigateway.HttpMethod.DELETE],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    /* Push Notification Routes */
+
+    httpApi.addRoutes({
+      path: '/device/register',
+      methods: [apigateway.HttpMethod.POST],
+      integration: notificationLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/device/unregister',
+      methods: [apigateway.HttpMethod.POST],
+      integration: notificationLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/notifications/send',
+      methods: [apigateway.HttpMethod.POST],
+      integration: notificationLambdaIntegration,
       authorizer: jwtAuthorizer,
     });
 

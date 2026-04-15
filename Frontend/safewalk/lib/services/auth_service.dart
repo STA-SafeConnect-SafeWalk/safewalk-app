@@ -24,7 +24,7 @@ class AuthService {
   /// True when the platform supports flutter_secure_storage without a
   /// provisioning profile (i.e. mobile / web).
   static bool get _useSecureStorage =>
-      kIsWeb || Platform.isAndroid || Platform.isIOS;
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   final FlutterSecureStorage _secure;
 

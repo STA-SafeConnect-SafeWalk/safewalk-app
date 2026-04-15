@@ -1,0 +1,16 @@
+{
+  "name": "notification-handler",
+  "version": "1.0.0",
+  "description": "Lambda function for SafeWalk push notification management via SNS",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.709.0",
+    "@aws-sdk/client-sns": "^3.709.0",
+    "@aws-sdk/lib-dynamodb": "^3.709.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}

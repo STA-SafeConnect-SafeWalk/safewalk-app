@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:safewalk/app.dart';
 import 'package:safewalk/services/api_service.dart';
 import 'package:safewalk/services/auth_service.dart';
+import 'package:safewalk/services/push_notification_service.dart';
 import 'package:safewalk/viewmodels/home_viewmodel.dart';
 import 'package:safewalk/viewmodels/login_viewmodel.dart';
 import 'package:safewalk/viewmodels/map_viewmodel.dart';
@@ -24,12 +25,19 @@ void main() {
   // Shared services so all ViewModels use the same instances.
   final authService = AuthService();
   final apiService = ApiService(authService: authService);
+  final pushService = PushNotificationService(apiService: apiService);
+
+  // Initialise Firebase (non-blocking – push won't work until configured).
+  pushService.init();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => LoginViewModel(apiService: apiService),
+          create: (_) => LoginViewModel(
+            apiService: apiService,
+            pushNotificationService: pushService,
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) => HomeViewModel(apiService: apiService),

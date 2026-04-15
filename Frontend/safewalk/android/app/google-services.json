@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "188485248388",
+    "project_id": "safewalk-backend-sns",
+    "storage_bucket": "safewalk-backend-sns.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:188485248388:android:94e40e5cfc2432e1a5e9d1",
+        "android_client_info": {
+          "package_name": "com.example.safewalk"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB_FzVnZcx3X1D6ycgwUqMr8dHx5e1quu4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
