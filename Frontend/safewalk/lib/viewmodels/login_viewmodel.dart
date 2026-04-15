@@ -7,6 +7,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:safewalk/services/api_service.dart';
+import 'package:safewalk/services/push_notification_service.dart';
 
 /// The different screens / modes the auth flow can be in.
 enum AuthMode {
@@ -19,9 +20,11 @@ enum AuthMode {
 
 class LoginViewModel extends ChangeNotifier {
   final ApiService _apiService;
+  final PushNotificationService? _pushService;
 
-  LoginViewModel({ApiService? apiService})
-    : _apiService = apiService ?? ApiService();
+  LoginViewModel({ApiService? apiService, PushNotificationService? pushNotificationService})
+    : _apiService = apiService ?? ApiService(),
+      _pushService = pushNotificationService;
 
   // ---------------------------------------------------------------------------
   // Observable state
@@ -108,6 +111,9 @@ class LoginViewModel extends ChangeNotifier {
 
       _isAuthenticated = true;
       _statusMessage = 'Login erfolgreich!';
+
+      // Register device for push notifications (fire-and-forget).
+      _pushService?.registerDevice();
     } else {
       final data = result.data;
       _statusMessage = (data is Map && data['error'] != null)
@@ -232,6 +238,8 @@ class LoginViewModel extends ChangeNotifier {
 
   /// Signs out the current user and resets state.
   Future<void> signOut() async {
+    // Unregister device before clearing tokens.
+    await _pushService?.unregisterDevice();
     await _apiService.signOut();
     _isAuthenticated = false;
     _authMode = AuthMode.signIn;
@@ -251,6 +259,8 @@ class LoginViewModel extends ChangeNotifier {
       final meResult = await _apiService.getMe();
       if (meResult.isSuccess) {
         _isAuthenticated = true;
+        // Re-register device for push notifications after session restore.
+        _pushService?.registerDevice();
       } else {
         // Profile was deleted – clear tokens and stay signed out.
         await _apiService.authService.clearTokens();

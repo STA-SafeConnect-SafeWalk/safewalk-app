@@ -326,6 +326,53 @@ class ApiService {
     );
   }
 
+  // ===========================================================================
+  // PUSH NOTIFICATIONS (JWT required)
+  // ===========================================================================
+
+  /// Registers a device token for push notifications.
+  Future<ApiResult> registerDevice({
+    required String deviceToken,
+    required String platform,
+  }) async {
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.deviceRegister,
+        body: {'deviceToken': deviceToken, 'platform': platform},
+      ),
+    );
+  }
+
+  /// Unregisters a device token.
+  Future<ApiResult> unregisterDevice({required String deviceToken}) async {
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.deviceUnregister,
+        body: {'deviceToken': deviceToken},
+      ),
+    );
+  }
+
+  /// Sends a push notification to a specific user (for testing).
+  Future<ApiResult> sendNotification({
+    required String targetUserId,
+    required String title,
+    required String body,
+    Map<String, String>? data,
+  }) async {
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.notificationsSend,
+        body: {
+          'targetUserId': targetUserId,
+          'title': title,
+          'body': body,
+          if (data != null) 'data': data,
+        },
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Legacy / testing
   // ---------------------------------------------------------------------------

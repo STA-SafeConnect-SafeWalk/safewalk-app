@@ -66,4 +66,17 @@ class ApiConstants {
 
   /// Returns the path for a specific contact: /contacts/{contactId}
   static String contactById(String contactId) => '/contacts/$contactId';
+
+  // ---------------------------------------------------------------------------
+  // Push notification endpoints (JWT required)
+  // ---------------------------------------------------------------------------
+
+  /// POST – Register a device token for push notifications.
+  static const String deviceRegister = '/device/register';
+
+  /// POST – Unregister a device token.
+  static const String deviceUnregister = '/device/unregister';
+
+  /// POST – Send a push notification to a specific user.
+  static const String notificationsSend = '/notifications/send';
 }

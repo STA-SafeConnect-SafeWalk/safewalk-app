@@ -19,6 +19,9 @@ inputs:
     description: 'Node.js version'
     required: false
     default: '20'
+  fcm-service-account-json:
+    description: 'Firebase service account JSON (for SNS FCM integration)'
+    required: true
 
 runs:
   using: 'composite'
@@ -27,6 +30,10 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
+
+    - name: Write FCM service account key
+      shell: bash
+      run: echo '${{ inputs.fcm-service-account-json }}' > Backend/infra/fcm-service-account.json
 
     - name: Install dependencies
       shell: bash

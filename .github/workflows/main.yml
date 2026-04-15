@@ -75,3 +75,4 @@ jobs:
           platform-domain: ${{ secrets.PLATFORM_DOMAIN }}
           aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           aws-region: ${{ env.AWS_REGION }}
+          fcm-service-account-json: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}

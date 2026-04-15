@@ -119,3 +119,10 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+fcm-service-account.json
+
+# Firebase secrets
+Frontend/safewalk/firebase.env.json
+Frontend/safewalk/web/firebase-messaging-sw.js
+Frontend/safewalk/android/app/google-services.json
+Frontend/safewalk/ios/Runner/GoogleService-Info.plist

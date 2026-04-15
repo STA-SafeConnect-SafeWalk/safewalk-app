@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -9,6 +10,7 @@ import * as apigatewayAuthorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers
 import * as apigatewayIntegrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { Construct } from 'constructs';
 import * as path from 'path';
+import * as fs from 'fs';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 
 export class AppBackendStack extends cdk.Stack {
@@ -42,6 +44,66 @@ export class AppBackendStack extends cdk.Stack {
       },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+
+    const deviceTokensTable = new dynamodb.Table(this, 'device-tokens-table', {
+      tableName: 'DeviceTokens',
+      partitionKey: {
+        name: 'userId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'deviceToken',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
+    const hasFcmKey = fs.existsSync(fcmKeyPath);
+    let fcmPlatformAppArn = '';
+
+    if (hasFcmKey) {
+      const fcmServiceAccountJson = fs.readFileSync(fcmKeyPath, 'utf-8');
+
+      const snsPlatformAppHandler = new NodejsFunction(this, 'sns-platform-app-resource', {
+        functionName: 'sns-platform-app-resource',
+        runtime: lambda.Runtime.NODEJS_24_X,
+        handler: 'index.handler',
+        entry: path.join(__dirname, '../../lambda/sns-platform-app-resource/index.ts'),
+        timeout: cdk.Duration.seconds(30),
+        memorySize: 128,
+        logRetention: logs.RetentionDays.ONE_WEEK,
+      });
+
+      snsPlatformAppHandler.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: [
+            'sns:CreatePlatformApplication',
+            'sns:DeletePlatformApplication',
+            'sns:SetPlatformApplicationAttributes',
+            'sns:GetPlatformApplicationAttributes',
+          ],
+          resources: ['*'],
+        }),
+      );
+
+      const snsPlatformAppProvider = new cr.Provider(this, 'sns-platform-app-provider', {
+        onEventHandler: snsPlatformAppHandler,
+        logRetention: logs.RetentionDays.ONE_WEEK,
+      });
+
+      const snsPlatformApp = new cdk.CustomResource(this, 'fcm-platform-app', {
+        serviceToken: snsPlatformAppProvider.serviceToken,
+        properties: {
+          Name: 'safewalk-fcm',
+          Platform: 'GCM',
+          PlatformCredential: fcmServiceAccountJson,
+        },
+      });
+
+      fcmPlatformAppArn = snsPlatformApp.getAttString('PlatformApplicationArn');
+    }
 
     const userPool = new cognito.UserPool(this, 'safewalk-user-pool', {
       userPoolName: 'safewalk-user-pool',
@@ -141,6 +203,35 @@ export class AppBackendStack extends cdk.Stack {
       }),
     );
 
+    const notificationHandler = new NodejsFunction(this, 'notification-handler', {
+      functionName: 'notification-handler',
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: 'index.handler',
+      entry: path.join(__dirname, '../../lambda/notification-handler/index.ts'),
+      environment: {
+        DEVICE_TOKENS_TABLE: deviceTokensTable.tableName,
+        FCM_PLATFORM_APP_ARN: fcmPlatformAppArn,
+      },
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 128,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+    });
+
+    deviceTokensTable.grantReadWriteData(notificationHandler);
+
+    notificationHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'sns:CreatePlatformEndpoint',
+          'sns:DeleteEndpoint',
+          'sns:Publish',
+          'sns:GetEndpointAttributes',
+          'sns:SetEndpointAttributes',
+        ],
+        resources: ['*'],
+      }),
+    );
+
     /******** API GATEWAY ********/
 
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
@@ -181,6 +272,11 @@ export class AppBackendStack extends cdk.Stack {
     const platformLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'platform-registration-integration',
       platformRegistrationHandler
+    );
+
+    const notificationLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'notification-integration',
+      notificationHandler,
     );
 
     /* API Routes – public (no authorizer) */
@@ -298,6 +394,29 @@ export class AppBackendStack extends cdk.Stack {
       path: '/contacts/{contactId}',
       methods: [apigateway.HttpMethod.DELETE],
       integration: userLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    /* Push Notification Routes */
+
+    httpApi.addRoutes({
+      path: '/device/register',
+      methods: [apigateway.HttpMethod.POST],
+      integration: notificationLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/device/unregister',
+      methods: [apigateway.HttpMethod.POST],
+      integration: notificationLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/notifications/send',
+      methods: [apigateway.HttpMethod.POST],
+      integration: notificationLambdaIntegration,
       authorizer: jwtAuthorizer,
     });
 

@@ -1,0 +1,14 @@
+{
+  "name": "sns-platform-app-resource",
+  "version": "1.0.0",
+  "description": "CDK Custom Resource Lambda for managing SNS Platform Applications",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-sns": "^3.709.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}
