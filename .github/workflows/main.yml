@@ -18,6 +18,7 @@ env:
 
 jobs:
   check-pr-title:
+    if: github.event_name == 'pull_request'
     name: Check PR Title
     runs-on: ubuntu-latest
     permissions:
