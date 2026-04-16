@@ -1,6 +1,7 @@
 import {
   APIGatewayProxyEventV2WithJWTAuthorizer,
   APIGatewayProxyResultV2,
+  SNSEvent,
 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -41,22 +42,29 @@ const parseBody = (event: Event): Record<string, unknown> => {
   }
 };
 
-export const handler = async (event: Event): Promise<Result> => {
-  const method = event.requestContext.http.method;
-  const path = event.rawPath;
-  const userId = event.requestContext.authorizer.jwt.claims.sub as string;
+export const handler = async (event: Event | SNSEvent): Promise<Result | void> => {
+  // SNS event — internal push notification dispatch
+  if ('Records' in event && event.Records?.[0]?.EventSource === 'aws:sns') {
+    return handleSNSEvent(event as SNSEvent);
+  }
+
+  // API Gateway event — user-facing routes
+  const apiEvent = event as Event;
+  const method = apiEvent.requestContext.http.method;
+  const path = apiEvent.rawPath;
+  const userId = apiEvent.requestContext.authorizer.jwt.claims.sub as string;
 
   console.log('Notification handler:', method, path, 'user:', userId);
 
   try {
     if (path === '/device/register' && method === 'POST') {
-      return registerDevice(userId, event);
+      return registerDevice(userId, apiEvent);
     }
     if (path === '/device/unregister' && method === 'POST') {
-      return unregisterDevice(userId, event);
+      return unregisterDevice(userId, apiEvent);
     }
     if (path === '/notifications/send' && method === 'POST') {
-      return sendNotification(userId, event);
+      return sendNotification(userId, apiEvent);
     }
     return json(404, { message: 'Not found' });
   } catch (err) {
@@ -207,4 +215,86 @@ async function sendNotification(
   );
 
   return json(200, { sent, failed });
+}
+
+interface InternalPushMessage {
+  targetUserId?: string;
+  targetUserIds?: string[];
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}
+
+async function handleSNSEvent(event: SNSEvent): Promise<void> {
+  for (const record of event.Records) {
+    let message: InternalPushMessage;
+    try {
+      message = JSON.parse(record.Sns.Message) as InternalPushMessage;
+    } catch {
+      console.error('Invalid SNS message JSON:', record.Sns.Message);
+      continue;
+    }
+
+    const { title, body: messageBody, data } = message;
+    if (!title || !messageBody) {
+      console.error('SNS message missing title or body:', message);
+      continue;
+    }
+
+    const userIds: string[] = [];
+    if (message.targetUserId) userIds.push(message.targetUserId);
+    if (message.targetUserIds) userIds.push(...message.targetUserIds);
+
+    if (userIds.length === 0) {
+      console.error('SNS message missing targetUserId or targetUserIds:', message);
+      continue;
+    }
+
+    for (const userId of userIds) {
+      await deliverPushToUser(userId, title, messageBody, data ?? {});
+    }
+  }
+}
+
+async function deliverPushToUser(
+  targetUserId: string,
+  title: string,
+  body: string,
+  data: Record<string, string>,
+): Promise<void> {
+  const devices = await ddb.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'userId = :uid',
+      ExpressionAttributeValues: { ':uid': targetUserId },
+    }),
+  );
+
+  if (!devices.Items || devices.Items.length === 0) {
+    console.log(`No registered devices for user ${targetUserId}, skipping`);
+    return;
+  }
+
+  const results = await Promise.allSettled(
+    devices.Items.map(async (device) => {
+      const payload = JSON.stringify({
+        GCM: JSON.stringify({
+          notification: { title, body },
+          data,
+        }),
+      });
+
+      await sns.send(
+        new PublishCommand({
+          TargetArn: device.endpointArn as string,
+          Message: payload,
+          MessageStructure: 'json',
+        }),
+      );
+    }),
+  );
+
+  const sent = results.filter((r) => r.status === 'fulfilled').length;
+  const failed = results.filter((r) => r.status === 'rejected').length;
+  console.log(`Internal push to ${targetUserId}: sent=${sent}, failed=${failed}`);
 }

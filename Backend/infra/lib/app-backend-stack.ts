@@ -5,6 +5,8 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as apigateway from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigatewayAuthorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
@@ -205,6 +207,11 @@ export class AppBackendStack extends cdk.Stack {
       }),
     );
 
+    const pushNotificationTopic = new sns.Topic(this, 'push-notification-topic', {
+      topicName: 'safewalk-push-notifications',
+      displayName: 'SafeWalk Internal Push Notifications',
+    });
+
     const notificationHandler = new NodejsFunction(this, 'notification-handler', {
       functionName: 'notification-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -232,6 +239,10 @@ export class AppBackendStack extends cdk.Stack {
         ],
         resources: ['*'],
       }),
+    );
+
+    pushNotificationTopic.addSubscription(
+      new snsSubscriptions.LambdaSubscription(notificationHandler),
     );
 
     /******** SOS ********/
@@ -278,6 +289,7 @@ export class AppBackendStack extends cdk.Stack {
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
         API_KEY: process.env.API_KEY || '',
         PROPAGATION_DELAY_SECONDS: '10',
+        PUSH_NOTIFICATION_TOPIC_ARN: pushNotificationTopic.topicArn,
       },
       timeout: cdk.Duration.seconds(30),
       memorySize: 128,
@@ -287,6 +299,7 @@ export class AppBackendStack extends cdk.Stack {
     sosEventsTable.grantReadWriteData(sosHandler);
     appUsersTable.grantReadData(sosHandler);
     sosPropagationQueue.grantSendMessages(sosHandler);
+    pushNotificationTopic.grantPublish(sosHandler);
 
     sosHandler.addEventSource(
       new SqsEventSource(sosPropagationQueue, {
