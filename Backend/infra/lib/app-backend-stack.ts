@@ -166,9 +166,9 @@ export class AppBackendStack extends cdk.Stack {
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/platform-registration-handler/index.ts'),
       environment: {
-        PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || 'https://example.com/api/register',
-        VENDOR_ID: process.env.VENDOR_ID || 'default-vendor-id',
-        API_KEY: process.env.API_KEY || 'default-api-key',
+        PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN,
+        VENDOR_ID: process.env.VENDOR_ID,
+        API_KEY: process.env.API_KEY,
         TABLE_NAME: appUsersTable.tableName,
       },
       timeout: cdk.Duration.seconds(20),
