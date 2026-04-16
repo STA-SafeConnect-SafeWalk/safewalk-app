@@ -5,9 +5,11 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as apigateway from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigatewayAuthorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as apigatewayIntegrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -232,6 +234,66 @@ export class AppBackendStack extends cdk.Stack {
       }),
     );
 
+    /******** SOS ********/
+
+    const sosEventsTable = new dynamodb.Table(this, 'app-sos-events-table', {
+      tableName: 'AppSOSEvents',
+      partitionKey: {
+        name: 'sosId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    sosEventsTable.addGlobalSecondaryIndex({
+      indexName: 'UserIndex',
+      partitionKey: {
+        name: 'userId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'createdAt',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const sosPropagationQueue = new sqs.Queue(this, 'sos-propagation-queue', {
+      queueName: 'safewalk-sos-propagation-queue',
+      visibilityTimeout: cdk.Duration.seconds(60),
+      retentionPeriod: cdk.Duration.hours(1),
+    });
+
+    const sosHandler = new NodejsFunction(this, 'app-sos-handler', {
+      functionName: 'app-sos-handler',
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: 'index.handler',
+      entry: path.join(__dirname, '../../lambda/sos-handler/index.ts'),
+      environment: {
+        SOS_TABLE_NAME: sosEventsTable.tableName,
+        APP_USERS_TABLE_NAME: appUsersTable.tableName,
+        QUEUE_URL: sosPropagationQueue.queueUrl,
+        PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
+        API_KEY: process.env.API_KEY || '',
+        PROPAGATION_DELAY_SECONDS: '10',
+      },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 128,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+    });
+
+    sosEventsTable.grantReadWriteData(sosHandler);
+    appUsersTable.grantReadData(sosHandler);
+    sosPropagationQueue.grantSendMessages(sosHandler);
+
+    sosHandler.addEventSource(
+      new SqsEventSource(sosPropagationQueue, {
+        batchSize: 1,
+      }),
+    );
+
     /******** API GATEWAY ********/
 
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
@@ -277,6 +339,11 @@ export class AppBackendStack extends cdk.Stack {
     const notificationLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'notification-integration',
       notificationHandler,
+    );
+
+    const sosLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'sos-integration',
+      sosHandler,
     );
 
     /* API Routes – public (no authorizer) */
@@ -417,6 +484,29 @@ export class AppBackendStack extends cdk.Stack {
       path: '/notifications/send',
       methods: [apigateway.HttpMethod.POST],
       integration: notificationLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    /* SOS Routes */
+
+    httpApi.addRoutes({
+      path: '/sos',
+      methods: [apigateway.HttpMethod.POST],
+      integration: sosLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/sos/{sosId}',
+      methods: [apigateway.HttpMethod.PATCH],
+      integration: sosLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/sos/{sosId}',
+      methods: [apigateway.HttpMethod.DELETE],
+      integration: sosLambdaIntegration,
       authorizer: jwtAuthorizer,
     });
 
