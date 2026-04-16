@@ -125,7 +125,7 @@ When running `flutter devices` you should now see the emulator.
 Copy the Device id listed in `flutter devices` and run
 
 ```
-flutter run -d <your-device-id>
+flutter run -d <your-device-id> --dart-define-from-file=Frontend/safewalk/firebase.env.json
 ```
 
 with your device id.
