@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Generated from firebase.env.json at build time
+ios/Runner/GoogleService-Info.plist
