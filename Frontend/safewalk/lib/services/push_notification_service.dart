@@ -23,7 +23,7 @@ class PushNotificationService {
   );
 
   PushNotificationService({required ApiService apiService})
-      : _apiService = apiService;
+    : _apiService = apiService;
 
   String? get currentToken => _currentToken;
 
@@ -34,10 +34,19 @@ class PushNotificationService {
 
   Future<bool> _doInit() async {
     try {
+      final firebaseOptions = DefaultFirebaseOptions.currentPlatform;
+
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
+        if (!_hasValidFirebaseOptions(firebaseOptions)) {
+          debugPrint(
+            '[Push] Firebase options are missing/invalid. '
+            'Skipping push initialisation. Provide --dart-define values '
+            'or configure Firebase via GoogleService-Info.plist.',
+          );
+          return false;
+        }
+
+        await Firebase.initializeApp(options: firebaseOptions);
       }
       _messaging = FirebaseMessaging.instance;
 
@@ -134,7 +143,8 @@ class PushNotificationService {
 
     await _localNotifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(_androidChannel);
   }
 
@@ -192,5 +202,12 @@ class PushNotificationService {
       default:
         return 'web';
     }
+  }
+
+  bool _hasValidFirebaseOptions(FirebaseOptions options) {
+    return options.apiKey.isNotEmpty &&
+        options.appId.isNotEmpty &&
+        options.messagingSenderId.isNotEmpty &&
+        options.projectId.isNotEmpty;
   }
 }

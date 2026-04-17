@@ -326,6 +326,46 @@ class ApiService {
     );
   }
 
+  /// Triggers an SOS alarm for the current user.
+  Future<ApiResult> triggerSos({
+    required double lat,
+    required double lng,
+    required double accuracy,
+  }) async {
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.sos,
+        body: {
+          'geoLocation': {'lat': lat, 'lng': lng, 'accuracy': accuracy},
+        },
+      ),
+    );
+  }
+
+  /// Cancels an active SOS alarm.
+  Future<ApiResult> cancelSos(String sosId) async {
+    return _authenticatedRequest(
+      () => _client.delete(ApiConstants.sosById(sosId)),
+    );
+  }
+
+  /// Updates the location of an active SOS alarm.
+  Future<ApiResult> updateSosLocation({
+    required String sosId,
+    required double lat,
+    required double lng,
+    required double accuracy,
+  }) async {
+    return _authenticatedRequest(
+      () => _client.patch(
+        ApiConstants.sosById(sosId),
+        body: {
+          'geoLocation': {'lat': lat, 'lng': lng, 'accuracy': accuracy},
+        },
+      ),
+    );
+  }
+
   // ===========================================================================
   // PUSH NOTIFICATIONS (JWT required)
   // ===========================================================================

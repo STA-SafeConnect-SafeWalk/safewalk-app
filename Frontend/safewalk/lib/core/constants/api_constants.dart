@@ -64,8 +64,14 @@ class ApiConstants {
   /// GET – List all trusted contacts.
   static const String contacts = '/contacts';
 
+  /// POST – Trigger a new SOS alarm.
+  static const String sos = '/sos';
+
   /// Returns the path for a specific contact: /contacts/{contactId}
   static String contactById(String contactId) => '/contacts/$contactId';
+
+  /// Returns the path for a specific SOS event: /sos/{sosId}
+  static String sosById(String sosId) => '/sos/$sosId';
 
   // ---------------------------------------------------------------------------
   // Push notification endpoints (JWT required)
