@@ -130,4 +130,3 @@ Frontend/safewalk/ios/Runner/GoogleService-Info.plist
 # Node.js
 node_modules/
 Backend/node_modules/
-package-lock.json
