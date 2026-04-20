@@ -35,6 +35,11 @@ runs:
       shell: bash
       run: echo '${{ inputs.fcm-service-account-json }}' > Backend/infra/fcm-service-account.json
 
+    - name: Install Backend root dependencies
+      shell: bash
+      working-directory: Backend
+      run: npm ci
+
     - name: Install dependencies
       shell: bash
       working-directory: Backend/infra

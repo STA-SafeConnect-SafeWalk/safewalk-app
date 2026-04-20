@@ -57,7 +57,7 @@ export class SosStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/sos-handler/index.ts'),
-      projectRoot: path.join(__dirname, '..'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         SOS_TABLE_NAME: sosEventsTable.tableName,
         APP_USERS_TABLE_NAME: appUsersTable.tableName,
