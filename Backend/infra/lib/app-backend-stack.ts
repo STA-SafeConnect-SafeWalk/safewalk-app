@@ -529,6 +529,13 @@ export class AppBackendStack extends cdk.Stack {
       authorizer: jwtAuthorizer,
     });
 
+    httpApi.addRoutes({
+      path: '/webhook',
+      methods: [apigateway.HttpMethod.POST],
+      integration: sosLambdaIntegration,
+      //authorizer: jwtAuthorizer, // SW 110 /aws/lambda/app-sos-handler only logs when commented
+    })
+
     new cdk.CfnOutput(this, 'api-url', {
       value: httpApi.apiEndpoint,
       description: 'HTTP API Gateway endpoint URL',
