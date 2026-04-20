@@ -1,3 +1,4 @@
+// SW 110
 import { createHmac, timingSafeEqual } from 'crypto';
 
 const TIMESTAMP_TOLERANCE_SECONDS = 300;
