@@ -13,7 +13,7 @@ import { handler } from '../sos-handler/index';
 const ddbMock = mockClient(DynamoDBDocumentClient);
 const sqsMock = mockClient(SQSClient);
 
-// Mock http/https for platform calls — preserve originals so AWS SDK internals still work
+// Mock http/https for platform calls
 jest.mock('https', () => {
   const actual = jest.requireActual('https');
   return { ...actual, request: jest.fn() };
