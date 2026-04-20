@@ -10,16 +10,8 @@ import {
 import { randomUUID } from 'crypto';
 import * as https from 'https';
 
-// ---------------------------------------------------------------------------
-// Clients
-// ---------------------------------------------------------------------------
-
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 
 const REPORT_TTL_DAYS = 90;
 const PUBLIC_DATA_TTL_HOURS = 24;
@@ -69,10 +61,6 @@ const PUBLIC_DATA_WEIGHTS: Record<PublicDataType, number> = {
   EMERGENCY_PHONE: 0.5,
 };
 
-// ---------------------------------------------------------------------------
-// Interfaces
-// ---------------------------------------------------------------------------
-
 interface SubmitReportRequest {
   lat: number;
   lng: number;
@@ -89,10 +77,6 @@ interface HeatmapCell {
   publicDataCounts: Partial<Record<PublicDataType, number>>;
   totalDataPoints: number;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers (same patterns as sos-handler)
-// ---------------------------------------------------------------------------
 
 const getEnv = (name: string): string | undefined => process.env[name];
 
@@ -127,10 +111,6 @@ function isValidCategory(category: string): category is ReportCategory {
 function sanitizeDescription(desc: string): string {
   return desc.replace(/<[^>]*>/g, '').trim().substring(0, MAX_DESCRIPTION_LENGTH);
 }
-
-// ---------------------------------------------------------------------------
-// Geohash Implementation
-// ---------------------------------------------------------------------------
 
 const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
 
@@ -212,7 +192,6 @@ function geohashesInBoundingBox(
 ): string[] {
   const hashes = new Set<string>();
   // Compute the approximate step size for the given precision
-  // Each geohash character adds ~5 bits; lat gets ~2.5 bits/char, lng ~2.5
   const latStep = 180 / Math.pow(2, Math.ceil((precision * 5) / 2));
   const lngStep = 360 / Math.pow(2, Math.floor((precision * 5) / 2));
 
@@ -221,7 +200,6 @@ function geohashesInBoundingBox(
       hashes.add(encodeGeohash(lat, lng, precision));
     }
   }
-  // Ensure we include corners
   hashes.add(encodeGeohash(minLat, minLng, precision));
   hashes.add(encodeGeohash(minLat, maxLng, precision));
   hashes.add(encodeGeohash(maxLat, minLng, precision));
@@ -244,10 +222,6 @@ function boundingBoxFromCenter(
     maxLng: lng + lngDelta,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Handler Entry Point
-// ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const handler = async (event: any): Promise<APIGatewayProxyResultV2> => {
@@ -278,10 +252,7 @@ async function handleAPIGatewayEvent(
   }
 }
 
-// ---------------------------------------------------------------------------
-// POST /heatmap/reports — Submit a user-generated safety report
-// ---------------------------------------------------------------------------
-
+// /post/heatmap/reports — Submit a new report
 async function handleSubmitReport(
   event: APIGatewayProxyEventV2,
   reportsTableName: string,
@@ -405,10 +376,7 @@ async function handleSubmitReport(
   });
 }
 
-// ---------------------------------------------------------------------------
-// GET /heatmap/reports — List own reports
-// ---------------------------------------------------------------------------
-
+// /heatmap/reports — List own reports
 async function handleListOwnReports(
   event: APIGatewayProxyEventV2,
   reportsTableName: string,
@@ -444,9 +412,7 @@ async function handleListOwnReports(
   }
 }
 
-// ---------------------------------------------------------------------------
-// DELETE /heatmap/reports/{reportId} — Delete own report
-// ---------------------------------------------------------------------------
+// /heatmap/reports/{reportId} — Delete own report
 
 async function handleDeleteReport(
   event: APIGatewayProxyEventV2,
@@ -478,7 +444,6 @@ async function handleDeleteReport(
       return jsonResponse(403, { error: 'Not authorized to delete this report' });
     }
 
-    // Delete using the table's primary key (geohash5 + sk)
     await docClient.send(
       new DeleteCommand({
         TableName: reportsTableName,
@@ -494,9 +459,7 @@ async function handleDeleteReport(
   }
 }
 
-// ---------------------------------------------------------------------------
-// GET /heatmap — Query heatmap data for an area
-// ---------------------------------------------------------------------------
+// /heatmap — Query heatmap data for an area
 
 async function handleQueryHeatmap(
   event: APIGatewayProxyEventV2,
