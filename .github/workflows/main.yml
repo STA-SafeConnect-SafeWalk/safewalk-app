@@ -73,6 +73,7 @@ jobs:
         with:
           vendor-id: ${{ secrets.VENDOR_ID }}
           api-key: ${{ secrets.API_KEY }}
+          webhook-secret: ${{ secrets.WEBHOOK_SECRET }}
           platform-domain: ${{ secrets.PLATFORM_DOMAIN }}
           aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           aws-region: ${{ env.AWS_REGION }}
