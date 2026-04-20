@@ -14,11 +14,18 @@ class HomeViewModel extends ChangeNotifier {
   final ApiService _apiService;
   final Duration _countdownTotal = const Duration(seconds: 5);
   final Duration _sosUpdateInterval = const Duration(seconds: 30);
+  static const double _timerEndDistanceThresholdMeters = 10;
+  static const double _timerEndAccuracyThresholdMeters = 10;
 
   Timer? _countdownTimer;
   Timer? _sosUpdateTimer;
   bool _initialized = false;
   bool _isSosUpdateInFlight = false;
+  bool _isCreatingSos = false;
+  bool _isCancelingCountdownSos = false;
+  bool _isFinalizingCountdown = false;
+  bool _countdownFinished = false;
+  bool _cancelRequestedDuringCountdown = false;
 
   SosScreenState _screenState = SosScreenState.home;
   Duration _remaining = const Duration(seconds: 5);
@@ -38,6 +45,7 @@ class HomeViewModel extends ChangeNotifier {
   String? _sosId;
   Map<String, dynamic>? _sosData;
   String? _sosError;
+  _SosLocationSnapshot? _initialSosLocation;
 
   SosScreenState get screenState => _screenState;
   bool get isSubmittingSos => _isSubmittingSos;
@@ -137,46 +145,80 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   void startCountdown() {
-    if (_isSubmittingSos) return;
+    if (_screenState != SosScreenState.home || _isSubmittingSos) return;
+
+    _stopSosLocationUpdates();
     _sosError = null;
+    _sosData = null;
+    _sosId = null;
+    _initialSosLocation = null;
+    _cancelRequestedDuringCountdown = false;
+    _countdownFinished = false;
     _screenState = SosScreenState.countdown;
     _remaining = _countdownTotal;
     _startTimer();
     notifyListeners();
+
+    unawaited(_createSosImmediately());
   }
 
   Future<void> cancelCountdownAndReturnHome() async {
+    if (_screenState != SosScreenState.countdown) return;
+
     _countdownTimer?.cancel();
-    _screenState = SosScreenState.home;
     _remaining = _countdownTotal;
-    notifyListeners();
-  }
-
-  Future<void> triggerSosNow() async {
-    if (_isSubmittingSos) return;
-
-    _countdownTimer?.cancel();
-    _stopSosLocationUpdates();
-    _isSubmittingSos = true;
+    _countdownFinished = true;
+    _cancelRequestedDuringCountdown = true;
     _sosError = null;
-    notifyListeners();
 
-    final hasLiveLocation = await refreshLocation(allowFallback: false);
+    final currentSosId = _sosId;
+    if (currentSosId != null && currentSosId.isNotEmpty) {
+      _isSubmittingSos = true;
+      notifyListeners();
+      await _cancelCountdownSosIfPossible();
+      return;
+    }
 
-    if (!hasLiveLocation || _lat == null || _lng == null || _accuracy == null) {
-      _isSubmittingSos = false;
-      _sosError =
-          'SOS konnte nicht ausgelöst werden: Kein aktueller Live-Standort verfügbar.';
-      _screenState = SosScreenState.home;
+    if (_isCreatingSos || _isCancelingCountdownSos) {
+      _isSubmittingSos = true;
       notifyListeners();
       return;
     }
 
+    _resetToHome();
+  }
+
+  Future<void> skipCountdownTimer() async {
+    if (_screenState != SosScreenState.countdown) return;
+
+    _countdownTimer?.cancel();
+    _remaining = Duration.zero;
+    _countdownFinished = true;
+    _sosError = null;
+    notifyListeners();
+
+    if (_cancelRequestedDuringCountdown) return;
+
+    await _onCountdownTimerFinished();
+  }
+
+  Future<void> _createSosImmediately() async {
+    if (_isCreatingSos) return;
+
+    _isCreatingSos = true;
+    _isSubmittingSos = true;
+    notifyListeners();
+
+    final initialLocation = await _loadLiveLocationSnapshot();
+    _initialSosLocation = initialLocation;
+
     final result = await _apiService.triggerSos(
-      lat: _lat!,
-      lng: _lng!,
-      accuracy: _accuracy!,
+      lat: initialLocation?.lat,
+      lng: initialLocation?.lng,
+      accuracy: initialLocation?.accuracy,
     );
+
+    _isCreatingSos = false;
 
     if (result.isSuccess && result.data is Map<String, dynamic>) {
       final map = result.data as Map<String, dynamic>;
@@ -190,21 +232,161 @@ class HomeViewModel extends ChangeNotifier {
       }
 
       if (_sosId == null || _sosId!.isEmpty) {
-        _screenState = SosScreenState.home;
-        _sosError =
-            'SOS wurde erstellt, aber keine SOS-ID wurde zurückgegeben. Bitte erneut versuchen.';
-      } else {
-        _screenState = SosScreenState.active;
-        _startSosLocationUpdates();
+        _isSubmittingSos = false;
+        if (_cancelRequestedDuringCountdown) {
+          _resetToHome();
+        } else {
+          _screenState = SosScreenState.home;
+          _sosError =
+              'SOS wurde erstellt, aber keine SOS-ID wurde zurückgegeben. Bitte erneut versuchen.';
+          notifyListeners();
+        }
+        return;
       }
-    } else {
-      _screenState = SosScreenState.home;
-      _sosError =
-          'SOS konnte nicht ausgelöst werden (${result.statusCode}): ${result.message ?? 'Unbekannter Fehler'}';
+
+      if (_cancelRequestedDuringCountdown) {
+        await _cancelCountdownSosIfPossible();
+        return;
+      }
+
+      _isSubmittingSos = false;
+      notifyListeners();
+
+      if (_countdownFinished) {
+        await _finalizeCountdownSosActivation();
+      }
+      return;
     }
 
     _isSubmittingSos = false;
+    if (_cancelRequestedDuringCountdown) {
+      _resetToHome();
+      return;
+    }
+
+    _screenState = SosScreenState.home;
+    _sosError =
+        'SOS konnte nicht ausgelöst werden (${result.statusCode}): ${result.message ?? 'Unbekannter Fehler'}';
     notifyListeners();
+  }
+
+  Future<void> _cancelCountdownSosIfPossible() async {
+    final currentSosId = _sosId;
+    if (currentSosId == null || currentSosId.isEmpty) {
+      _isSubmittingSos = false;
+      _resetToHome();
+      return;
+    }
+
+    if (_isCancelingCountdownSos) return;
+    _isCancelingCountdownSos = true;
+
+    try {
+      final result = await _apiService.cancelSos(currentSosId);
+      _isSubmittingSos = false;
+
+      if (result.isSuccess || _isSosAlreadyClosedStatus(result.statusCode)) {
+        _resetToHome();
+        return;
+      }
+
+      _cancelRequestedDuringCountdown = false;
+      _sosError =
+          'SOS konnte nicht beendet werden (${result.statusCode}): ${result.message ?? 'Unbekannter Fehler'}';
+      _screenState = SosScreenState.active;
+      _startSosLocationUpdates();
+      notifyListeners();
+    } finally {
+      _isCancelingCountdownSos = false;
+    }
+  }
+
+  Future<void> _finalizeCountdownSosActivation() async {
+    if (_isFinalizingCountdown) return;
+    if (_screenState != SosScreenState.countdown ||
+        _cancelRequestedDuringCountdown) {
+      return;
+    }
+
+    final currentSosId = _sosId;
+    if (currentSosId == null || currentSosId.isEmpty) {
+      _isSubmittingSos = false;
+      _screenState = SosScreenState.home;
+      _sosError = 'SOS konnte nicht aktiviert werden: Keine SOS-ID verfügbar.';
+      notifyListeners();
+      return;
+    }
+
+    _isFinalizingCountdown = true;
+    _isSubmittingSos = true;
+    notifyListeners();
+
+    try {
+      final latestLocation = await _loadLiveLocationSnapshot();
+      final shouldSendUpdate = _shouldSendTimerEndLocationUpdate(
+        initial: _initialSosLocation,
+        latest: latestLocation,
+      );
+
+      if (shouldSendUpdate && latestLocation != null) {
+        final result = await _apiService.updateSosLocation(
+          sosId: currentSosId,
+          lat: latestLocation.lat,
+          lng: latestLocation.lng,
+          accuracy: latestLocation.accuracy,
+        );
+
+        if (!result.isSuccess) {
+          debugPrint(
+            '[SOS] Timer-end location update failed '
+            '(${result.statusCode}): ${result.message ?? 'Unknown error'}',
+          );
+        } else {
+          _initialSosLocation = latestLocation;
+        }
+      }
+
+      if (_cancelRequestedDuringCountdown) {
+        return;
+      }
+
+      _screenState = SosScreenState.active;
+      _startSosLocationUpdates();
+    } catch (e) {
+      debugPrint('[SOS] Timer-end location update error: $e');
+    } finally {
+      _isFinalizingCountdown = false;
+      _isSubmittingSos = false;
+      notifyListeners();
+    }
+  }
+
+  Future<_SosLocationSnapshot?> _loadLiveLocationSnapshot() async {
+    final hasLiveLocation = await refreshLocation(allowFallback: false);
+    if (!hasLiveLocation || _lat == null || _lng == null || _accuracy == null) {
+      return null;
+    }
+
+    return _SosLocationSnapshot(lat: _lat!, lng: _lng!, accuracy: _accuracy!);
+  }
+
+  bool _shouldSendTimerEndLocationUpdate({
+    required _SosLocationSnapshot? initial,
+    required _SosLocationSnapshot? latest,
+  }) {
+    if (latest == null) return false;
+    if (initial == null) return true;
+
+    final distance = Geolocator.distanceBetween(
+      initial.lat,
+      initial.lng,
+      latest.lat,
+      latest.lng,
+    );
+    final accuracyDelta = (latest.accuracy - initial.accuracy).abs();
+
+    return distance >= _timerEndDistanceThresholdMeters ||
+        accuracyDelta >= _timerEndAccuracyThresholdMeters;
   }
 
   Future<void> cancelActiveSos() async {
@@ -221,7 +403,7 @@ class HomeViewModel extends ChangeNotifier {
     final result = await _apiService.cancelSos(_sosId!);
     _isSubmittingSos = false;
 
-    if (result.isSuccess) {
+    if (result.isSuccess || _isSosAlreadyClosedStatus(result.statusCode)) {
       _resetToHome();
     } else {
       _sosError =
@@ -230,14 +412,25 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
+  bool _isSosAlreadyClosedStatus(int? statusCode) {
+    return statusCode == 410 || statusCode == 404;
+  }
+
   void _resetToHome() {
     _countdownTimer?.cancel();
     _stopSosLocationUpdates();
     _screenState = SosScreenState.home;
     _remaining = _countdownTotal;
+    _isSubmittingSos = false;
+    _isCreatingSos = false;
+    _isCancelingCountdownSos = false;
+    _isFinalizingCountdown = false;
+    _countdownFinished = false;
+    _cancelRequestedDuringCountdown = false;
     _sosId = null;
     _sosData = null;
     _sosError = null;
+    _initialSosLocation = null;
     notifyListeners();
   }
 
@@ -254,14 +447,28 @@ class HomeViewModel extends ChangeNotifier {
       if (newRemaining <= Duration.zero) {
         _remaining = Duration.zero;
         timer.cancel();
+        _countdownFinished = true;
         notifyListeners();
-        unawaited(triggerSosNow());
+        unawaited(_onCountdownTimerFinished());
         return;
       }
 
       _remaining = newRemaining;
       notifyListeners();
     });
+  }
+
+  Future<void> _onCountdownTimerFinished() async {
+    if (_screenState != SosScreenState.countdown ||
+        _cancelRequestedDuringCountdown) {
+      return;
+    }
+
+    if (_isCreatingSos || _isCancelingCountdownSos) {
+      return;
+    }
+
+    await _finalizeCountdownSosActivation();
   }
 
   void _startSosLocationUpdates() {
@@ -356,4 +563,16 @@ class HomeViewModel extends ChangeNotifier {
     _stopSosLocationUpdates();
     super.dispose();
   }
+}
+
+class _SosLocationSnapshot {
+  const _SosLocationSnapshot({
+    required this.lat,
+    required this.lng,
+    required this.accuracy,
+  });
+
+  final double lat;
+  final double lng;
+  final double accuracy;
 }

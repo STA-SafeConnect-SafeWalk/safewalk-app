@@ -328,16 +328,26 @@ class ApiService {
 
   /// Triggers an SOS alarm for the current user.
   Future<ApiResult> triggerSos({
-    required double lat,
-    required double lng,
-    required double accuracy,
+    double? lat,
+    double? lng,
+    double? accuracy,
   }) async {
+    assert(
+      (lat == null && lng == null && accuracy == null) ||
+          (lat != null && lng != null && accuracy != null),
+      'lat, lng and accuracy must be provided together.',
+    );
+
+    final hasLocation = lat != null && lng != null && accuracy != null;
+
     return _authenticatedRequest(
       () => _client.post(
         ApiConstants.sos,
-        body: {
-          'geoLocation': {'lat': lat, 'lng': lng, 'accuracy': accuracy},
-        },
+        body: hasLocation
+            ? {
+                'geoLocation': {'lat': lat, 'lng': lng, 'accuracy': accuracy},
+              }
+            : <String, dynamic>{},
       ),
     );
   }

@@ -127,7 +127,7 @@ class _HomeView extends StatelessWidget {
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 18),
                 child: Text(
-                  'Drücke den SOS Knopf, um den Alarm auszulösen. Er wird dann in 5 Sekunden aktiviert.',
+                  'Drücke den SOS Knopf, um den Alarm auszulösen. Du kannst den Alarm innerhalb von 5 Sekunden abbrechen.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -230,7 +230,7 @@ class _CountdownView extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
-                      'Deine Notfallkontakte werden nach Ablauf des Timers benachrichtigt.',
+                      'Du kannst den Alarm innerhalb des Timers noch abbrechen.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
@@ -249,9 +249,11 @@ class _CountdownView extends StatelessWidget {
                     onCompleted: vm.cancelCountdownAndReturnHome,
                   ),
                   const SizedBox(height: 16),
-                  _DirectTriggerButton(
+                  _CountdownSkipButton(
                     isLoading: vm.isSubmittingSos,
-                    onPressed: vm.isSubmittingSos ? null : vm.triggerSosNow,
+                    onPressed: vm.isSubmittingSos
+                        ? null
+                        : vm.skipCountdownTimer,
                   ),
                   const SizedBox(height: 16),
                   _LocationMeta(
@@ -714,8 +716,8 @@ class _ActiveSosCircle extends StatelessWidget {
   }
 }
 
-class _DirectTriggerButton extends StatelessWidget {
-  const _DirectTriggerButton({
+class _CountdownSkipButton extends StatelessWidget {
+  const _CountdownSkipButton({
     required this.onPressed,
     required this.isLoading,
   });
@@ -751,10 +753,10 @@ class _DirectTriggerButton extends StatelessWidget {
             : const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.keyboard_double_arrow_right, size: 28),
+                  Icon(Icons.skip_next_rounded, size: 28),
                   SizedBox(width: 8),
                   Text(
-                    'ALARM DIREKT AUSLÖSEN',
+                    'TIMER ÜBERSPRINGEN',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
