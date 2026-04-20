@@ -26,11 +26,11 @@ interface GeoLocation {
 }
 
 interface TriggerSOSRequest {
-  geoLocation: GeoLocation;
+  geoLocation?: GeoLocation;
 }
 
 interface UpdateSOSRequest {
-  geoLocation: GeoLocation;
+  geoLocation?: GeoLocation;
 }
 
 interface PlatformSOSResponse {
@@ -177,7 +177,7 @@ async function handleTriggerSOS(
     return jsonResponse(400, { error: 'Invalid JSON in request body' });
   }
 
-  if (!isValidGeoLocation(requestBody.geoLocation)) {
+  if (requestBody.geoLocation !== undefined && !isValidGeoLocation(requestBody.geoLocation)) {
     return jsonResponse(400, {
       error: 'Valid geoLocation with lat (-90..90) and lng (-180..180) is required',
     });
@@ -248,7 +248,7 @@ async function handleTriggerSOS(
           userId,
           safeWalkId,
           status: 'PENDING',
-          geoLocation: requestBody.geoLocation,
+          ...(requestBody.geoLocation !== undefined && { geoLocation: requestBody.geoLocation }),
           createdAt: now,
           updatedAt: now,
           ttl,
@@ -288,7 +288,7 @@ async function handleTriggerSOS(
     data: {
       sosId,
       status: 'PENDING',
-      geoLocation: requestBody.geoLocation,
+      ...(requestBody.geoLocation !== undefined && { geoLocation: requestBody.geoLocation }),
       propagationDelaySeconds: delaySeconds,
       createdAt: now,
     },
@@ -313,7 +313,7 @@ async function handleUpdateSOS(
     return jsonResponse(400, { error: 'Invalid JSON in request body' });
   }
 
-  if (!isValidGeoLocation(requestBody.geoLocation)) {
+  if (requestBody.geoLocation !== undefined && !isValidGeoLocation(requestBody.geoLocation)) {
     return jsonResponse(400, {
       error: 'Valid geoLocation with lat (-90..90) and lng (-180..180) is required',
     });
@@ -346,15 +346,17 @@ async function handleUpdateSOS(
 
   // Update local record with latest geo location
   try {
+    const updateExpression = requestBody.geoLocation !== undefined
+      ? 'SET geoLocation = :geo, updatedAt = :now'
+      : 'SET updatedAt = :now';
+    const expressionValues: Record<string, unknown> = { ':now': now };
+    if (requestBody.geoLocation !== undefined) expressionValues[':geo'] = requestBody.geoLocation;
     await docClient.send(
       new UpdateCommand({
         TableName: sosTableName,
         Key: { sosId },
-        UpdateExpression: 'SET geoLocation = :geo, updatedAt = :now',
-        ExpressionAttributeValues: {
-          ':geo': requestBody.geoLocation,
-          ':now': now,
-        },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: expressionValues,
       }),
     );
   } catch (error) {
@@ -364,7 +366,7 @@ async function handleUpdateSOS(
 
   // If already propagated, forward location update to platform
   let platformUpdated = false;
-  if (sosRecord.status === 'ACTIVE' && sosRecord.platformSosId) {
+  if (sosRecord.status === 'ACTIVE' && sosRecord.platformSosId && requestBody.geoLocation !== undefined) {
     const platformDomain = getEnv('PLATFORM_DOMAIN');
     const apiKey = getEnv('API_KEY');
 
@@ -388,7 +390,7 @@ async function handleUpdateSOS(
     data: {
       sosId,
       status: sosRecord.status,
-      geoLocation: requestBody.geoLocation,
+      ...(requestBody.geoLocation !== undefined && { geoLocation: requestBody.geoLocation }),
       updatedAt: now,
       platformUpdated,
     },
