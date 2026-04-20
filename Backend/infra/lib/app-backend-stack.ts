@@ -245,6 +245,77 @@ export class AppBackendStack extends cdk.Stack {
       new snsSubscriptions.LambdaSubscription(notificationHandler),
     );
 
+    /******** HEATMAP ********/
+
+    const heatmapReportsTable = new dynamodb.Table(this, 'heatmap-reports-table', {
+      tableName: 'HeatmapReports',
+      partitionKey: {
+        name: 'geohash5',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'sk',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    heatmapReportsTable.addGlobalSecondaryIndex({
+      indexName: 'UserReportsIndex',
+      partitionKey: {
+        name: 'userId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'createdAt',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    heatmapReportsTable.addGlobalSecondaryIndex({
+      indexName: 'ReportIdIndex',
+      partitionKey: {
+        name: 'reportId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const heatmapPublicDataTable = new dynamodb.Table(this, 'heatmap-public-data-table', {
+      tableName: 'HeatmapPublicDataCache',
+      partitionKey: {
+        name: 'geohash5',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'sk',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    const heatmapHandler = new NodejsFunction(this, 'heatmap-handler', {
+      functionName: 'heatmap-handler',
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: 'index.handler',
+      entry: path.join(__dirname, '../../lambda/heatmap-handler/index.ts'),
+      environment: {
+        HEATMAP_REPORTS_TABLE_NAME: heatmapReportsTable.tableName,
+        HEATMAP_PUBLIC_DATA_TABLE_NAME: heatmapPublicDataTable.tableName,
+      },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+    });
+
+    heatmapReportsTable.grantReadWriteData(heatmapHandler);
+    heatmapPublicDataTable.grantReadWriteData(heatmapHandler);
+
     /******** SOS ********/
 
     const sosEventsTable = new dynamodb.Table(this, 'app-sos-events-table', {
@@ -357,6 +428,11 @@ export class AppBackendStack extends cdk.Stack {
     const sosLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'sos-integration',
       sosHandler,
+    );
+
+    const heatmapLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'heatmap-integration',
+      heatmapHandler,
     );
 
     /* API Routes – public (no authorizer) */
@@ -520,6 +596,36 @@ export class AppBackendStack extends cdk.Stack {
       path: '/sos/{sosId}',
       methods: [apigateway.HttpMethod.DELETE],
       integration: sosLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    /* Heatmap Routes */
+
+    httpApi.addRoutes({
+      path: '/heatmap',
+      methods: [apigateway.HttpMethod.GET],
+      integration: heatmapLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/heatmap/reports',
+      methods: [apigateway.HttpMethod.POST],
+      integration: heatmapLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/heatmap/reports',
+      methods: [apigateway.HttpMethod.GET],
+      integration: heatmapLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/heatmap/reports/{reportId}',
+      methods: [apigateway.HttpMethod.DELETE],
+      integration: heatmapLambdaIntegration,
       authorizer: jwtAuthorizer,
     });
 
