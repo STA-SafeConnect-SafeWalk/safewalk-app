@@ -148,10 +148,22 @@ describe('sos-handler', () => {
       expect(body.data.geoLocation).toEqual(validGeoLocation);
     });
 
-    it('should return 400 if geoLocation is missing', async () => {
+    it('should create SOS without geoLocation', async () => {
+      ddbMock.on(GetCommand, { TableName: 'AppUsers' }).resolves({
+        Item: { safeWalkAppId: 'user-123', safeWalkId: 'sw-id-123' },
+      });
+      ddbMock.on(QueryCommand).resolves({ Items: [] });
+      ddbMock.on(PutCommand).resolves({});
+      sqsMock.on(SendMessageCommand).resolves({});
+
       const event = generateApiGatewayEvent('POST', '/sos', {});
       const result = await handler(event);
-      expect(result.statusCode).toBe(400);
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(201);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('PENDING');
+      expect(body.data.geoLocation).toBeUndefined();
     });
 
     it('should return 400 if lat/lng are out of range', async () => {
@@ -376,6 +388,27 @@ describe('sos-handler', () => {
 
       const result = await handler(event);
       expect(result.statusCode).toBe(400);
+    });
+
+    it('should update SOS without geoLocation (updatedAt only)', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: { sosId: 'sos-1', userId: 'user-123', status: 'PENDING' },
+      });
+      ddbMock.on(UpdateCommand).resolves({});
+
+      const event = generateApiGatewayEvent(
+        'PATCH',
+        '/sos/sos-1',
+        {},
+        { sosId: 'sos-1' },
+      );
+
+      const result = await handler(event);
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.data.geoLocation).toBeUndefined();
+      expect(body.data.platformUpdated).toBe(false);
     });
   });
 
