@@ -60,7 +60,11 @@ runs:
       if: github.event_name == 'pull_request'
       shell: bash
       working-directory: Backend/infra
-      run: npx cdk diff safewalk-app-backend-stack
+      env:
+        API_KEY: ${{ inputs.api-key }}
+        PLATFORM_DOMAIN: ${{ inputs.platform-domain }}
+        VENDOR_ID: ${{ inputs.vendor-id }}
+      run: npx cdk diff --all
 
     - name: CDK Deploy Backend
       if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
@@ -70,4 +74,4 @@ runs:
         API_KEY: ${{ inputs.api-key }}
         PLATFORM_DOMAIN: ${{ inputs.platform-domain }}
         VENDOR_ID: ${{ inputs.vendor-id }}
-      run: npx cdk deploy safewalk-app-backend-stack --require-approval never
+      run: npx cdk deploy --all --require-approval never
