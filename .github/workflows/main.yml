@@ -59,10 +59,31 @@ jobs:
               body: message
             });
 
+  detect-backend-changes:
+    name: Detect Backend Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'Backend/**'
+
   deploy-infra:
     name: Deploy Infrastructure
+    needs: detect-backend-changes
     if: |
-      github.event_name != 'pull_request'
+      github.event_name != 'pull_request' &&
+      needs.detect-backend-changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
