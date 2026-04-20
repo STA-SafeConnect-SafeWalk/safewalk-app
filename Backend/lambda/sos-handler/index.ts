@@ -8,9 +8,10 @@ import {
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { randomUUID, createHmac } from 'crypto';
+import { randomUUID, createHmac } from 'crypto'; // SW 110
 import * as https from 'https';
 import * as http from 'http';
+import { verifySafeConnectWebhook } from './safeconnect-webhook';
 
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -98,21 +99,6 @@ const UNAUTHORIZED_RESPONSE: APIGatewayProxyResultV2 = {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ error: 'Unauthorized' }),
 };
-
-function verifySignature(
-  body: string,
-  timestamp: string,
-  signatureHeader: string | undefined,
-  secret: string | undefined
-): boolean {
-  if (!signatureHeader || !secret || !timestamp) return false;
-
-  const expected = createHmac('sha256', secret)
-    .update(`${timestamp}.${body}`)
-    .digest('hex');
-
-  return signatureHeader === `sha256=${expected}`;
-}
 
 function isValidGeoLocation(geo: unknown): geo is GeoLocation {
   if (!geo || typeof geo !== 'object') return false;
@@ -485,7 +471,10 @@ async function handleCancelSOS(
 // SW 110
 async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
   const secret = process.env.WEBHOOK_SECRET;
+
   console.log("WEBHOOK_SECRET exists:", !!process.env.WEBHOOK_SECRET); // SW 110
+
+
 
   if (!event.body) {
     return jsonResponse(400, { error: 'Missing body' });
@@ -496,16 +485,15 @@ async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
     Object.entries(event.headers).map(([k, v]) => [k.toLowerCase(), v])
   );
 
-  const signature = headers['x-safewalk-signature'];
-  const timestamp = headers['x-safewalk-timestamp'];
-  // const signature = event.headers['x-safewalk-signature'];
-  // const timestamp = event.headers['x-safewalk-timestamp'];
+  const rawBody = event.body ?? '';
 
-  if (!verifySignature(event.body, timestamp, signature, secret)) {
+  const result = verifySafeConnectWebhook(rawBody, event.headers, secret);
+
+   if (!result.valid) {
     return jsonResponse(401, { error: 'Invalid signature' });
   }
 
-  const payload = JSON.parse(event.body) as WebhookEvent;
+  const { payload } = result;
 
   console.log('Received webhook:', payload.type);
 

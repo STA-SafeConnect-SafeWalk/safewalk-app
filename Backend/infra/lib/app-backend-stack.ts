@@ -21,7 +21,7 @@ export class AppBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY'];
+    const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY', 'WEBHOOK_SECRET'];
 
     for (const name of required) {
       if (!process.env[name]) {
@@ -294,6 +294,7 @@ export class AppBackendStack extends cdk.Stack {
         QUEUE_URL: sosPropagationQueue.queueUrl,
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
         API_KEY: process.env.API_KEY || '',
+        WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
         PROPAGATION_DELAY_SECONDS: '10',
         PUSH_NOTIFICATION_TOPIC_ARN: pushNotificationTopic.topicArn,
       },
