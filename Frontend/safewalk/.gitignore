@@ -46,3 +46,5 @@ app.*.map.json
 
 # Generated from firebase.env.json at build time
 ios/Runner/GoogleService-Info.plist
+web/firebase-messaging-sw.js
+android/app/google-services.json
