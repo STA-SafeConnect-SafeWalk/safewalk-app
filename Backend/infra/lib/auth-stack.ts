@@ -49,7 +49,7 @@ export class AuthStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/auth-handler/index.ts'),
-      projectRoot: path.join(__dirname, '..'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         APP_CLIENT_ID: this.userPoolClient.userPoolClientId,
       },

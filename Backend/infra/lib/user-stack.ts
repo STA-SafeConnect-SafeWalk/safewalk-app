@@ -39,7 +39,7 @@ export class UserStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/user-profile-handler/index.ts'),
-      projectRoot: path.join(__dirname, '..'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         TABLE_NAME: this.appUsersTable.tableName,
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
@@ -58,7 +58,7 @@ export class UserStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/platform-registration-handler/index.ts'),
-      projectRoot: path.join(__dirname, '..'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN!,
         VENDOR_ID: process.env.VENDOR_ID!,

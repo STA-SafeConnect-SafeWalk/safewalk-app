@@ -44,7 +44,7 @@ export class NotificationStack extends cdk.Stack {
         runtime: lambda.Runtime.NODEJS_24_X,
         handler: 'index.handler',
         entry: path.join(__dirname, '../../lambda/sns-platform-app-resource/index.ts'),
-        projectRoot: path.join(__dirname, '..'),
+        projectRoot: path.join(__dirname, '../..'),
         timeout: cdk.Duration.seconds(30),
         memorySize: 128,
         logRetention: logs.RetentionDays.ONE_WEEK,
@@ -89,7 +89,7 @@ export class NotificationStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/notification-handler/index.ts'),
-      projectRoot: path.join(__dirname, '..'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         DEVICE_TOKENS_TABLE: deviceTokensTable.tableName,
         FCM_PLATFORM_APP_ARN: fcmPlatformAppArn,
