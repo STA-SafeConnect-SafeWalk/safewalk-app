@@ -75,6 +75,7 @@ export class AppBackendStack extends cdk.Stack {
         runtime: lambda.Runtime.NODEJS_24_X,
         handler: 'index.handler',
         entry: path.join(__dirname, '../../lambda/sns-platform-app-resource/index.ts'),
+        projectRoot: path.join(__dirname, '../..'),
         timeout: cdk.Duration.seconds(30),
         memorySize: 128,
         logRetention: logs.RetentionDays.ONE_WEEK,
@@ -145,6 +146,7 @@ export class AppBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/user-profile-handler/index.ts'),
+      projectRoot: path.join(__dirname, '../..'), 
       environment: {
         TABLE_NAME: appUsersTable.tableName,
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
@@ -167,6 +169,7 @@ export class AppBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/platform-registration-handler/index.ts'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN!,
         VENDOR_ID: process.env.VENDOR_ID!,
@@ -185,6 +188,7 @@ export class AppBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/auth-handler/index.ts'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         APP_CLIENT_ID: userPoolClient.userPoolClientId,
       },
@@ -217,6 +221,7 @@ export class AppBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/notification-handler/index.ts'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         DEVICE_TOKENS_TABLE: deviceTokensTable.tableName,
         FCM_PLATFORM_APP_ARN: fcmPlatformAppArn,
@@ -282,6 +287,7 @@ export class AppBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/sos-handler/index.ts'),
+      projectRoot: path.join(__dirname, '../..'),
       environment: {
         SOS_TABLE_NAME: sosEventsTable.tableName,
         APP_USERS_TABLE_NAME: appUsersTable.tableName,
