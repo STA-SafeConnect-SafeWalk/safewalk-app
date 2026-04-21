@@ -64,6 +64,7 @@ export class SosStack extends cdk.Stack {
         QUEUE_URL: sosPropagationQueue.queueUrl,
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
         API_KEY: process.env.API_KEY || '',
+        WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
         PROPAGATION_DELAY_SECONDS: '10',
         PUSH_NOTIFICATION_TOPIC_ARN: pushNotificationTopic.topicArn,
       },

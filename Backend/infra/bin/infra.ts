@@ -6,7 +6,7 @@ import { NotificationStack } from '../lib/notification-stack';
 import { SosStack } from '../lib/sos-stack';
 import { ApiStack } from '../lib/api-stack';
 
-const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY'];
+const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY', 'WEBHOOK_SECRET'];
 
 for (const name of required) {
   if (!process.env[name]) {
