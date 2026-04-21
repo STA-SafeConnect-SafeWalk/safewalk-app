@@ -7,16 +7,22 @@ import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
+export interface AuthStackProps extends cdk.StackProps {
+  devPrefix?: string;
+}
+
 export class AuthStack extends cdk.Stack {
   public readonly userPool: cognito.UserPool;
   public readonly userPoolClient: cognito.UserPoolClient;
   public readonly authHandler: NodejsFunction;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: AuthStackProps) {
     super(scope, id, props);
 
+    const prefix = props?.devPrefix ? `${props.devPrefix}-` : '';
+
     this.userPool = new cognito.UserPool(this, 'safewalk-user-pool', {
-      userPoolName: 'safewalk-user-pool',
+      userPoolName: `${prefix}safewalk-user-pool`,
       selfSignUpEnabled: true,
       signInAliases: { email: true },
       autoVerify: { email: true },
@@ -36,7 +42,7 @@ export class AuthStack extends cdk.Stack {
     });
 
     this.userPoolClient = this.userPool.addClient('safewalk-app-client', {
-      userPoolClientName: 'safewalk-app-client',
+      userPoolClientName: `${prefix}safewalk-app-client`,
       authFlows: {
         userPassword: true,
         userSrp: true,
@@ -45,7 +51,7 @@ export class AuthStack extends cdk.Stack {
     });
 
     this.authHandler = new NodejsFunction(this, 'auth-handler', {
-      functionName: 'auth-handler',
+      functionName: `${prefix}auth-handler`,
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/auth-handler/index.ts'),
