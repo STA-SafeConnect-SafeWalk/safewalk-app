@@ -7,7 +7,7 @@ class ApiConstants {
 
   /// Base URL of the SafeWalk backend API.
   static const String baseUrl =
-      'https://0ibq771vuf.execute-api.eu-central-1.amazonaws.com';
+      'https://r7fu37l4m5.execute-api.eu-central-1.amazonaws.com';
 
   /// Default timeout duration for HTTP requests.
   static const Duration defaultTimeout = Duration(seconds: 15);
