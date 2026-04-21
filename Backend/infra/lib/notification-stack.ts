@@ -112,6 +112,10 @@ export class NotificationStack extends cdk.Stack {
 
     deviceTokensTable.grantReadWriteData(this.notificationHandler);
 
+    // Keep the cross-stack export alive for the currently deployed SOS stack
+    // which still imports this value. Safe to remove after one successful deploy.
+    this.exportValue(deviceTokensTable.tableArn);
+
     this.notificationHandler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [
