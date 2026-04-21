@@ -112,13 +112,6 @@ export class NotificationStack extends cdk.Stack {
 
     deviceTokensTable.grantReadWriteData(this.notificationHandler);
 
-    // TODO: Remove after one successful deploy.
-    // A prior local deploy added a cross-stack dependency from sos-stack to
-    // deviceTokensTable. These exports keep CloudFormation happy until sos-stack
-    // updates and drops the imports.
-    this.exportValue(deviceTokensTable.tableArn);
-    this.exportValue(deviceTokensTable.tableName);
-
     this.notificationHandler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [
