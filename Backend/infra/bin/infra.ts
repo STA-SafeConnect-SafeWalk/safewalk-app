@@ -16,48 +16,38 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-if (devPrefix) {
-  // Lightweight dev environment – only Auth + Heatmap stacks.
-  // No production env vars required.
-  // Deploy with: cdk deploy --all -c devPrefix=<your-name>
-  // Tear down with: cdk destroy --all -c devPrefix=<your-name>
-  const authStack = new AuthStack(app, `${devPrefix}-safewalk-app-auth-stack`, { env, devPrefix });
-  const heatmapStack = new HeatmapStack(app, `${devPrefix}-safewalk-app-heatmap-stack`, { env, devPrefix });
-  new ApiStack(app, `${devPrefix}-safewalk-app-api-stack`, {
-    env,
-    devPrefix,
-    userPool: authStack.userPool,
-    userPoolClient: authStack.userPoolClient,
-    authHandler: authStack.authHandler,
-    heatmapHandler: heatmapStack.heatmapHandler,
-  });
-} else {
-  // Full production deployment – all env vars are required.
+if (!devPrefix) {
   const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY'];
   for (const name of required) {
     if (!process.env[name]) {
       throw new Error(`Missing required env var: ${name}`);
     }
   }
-
-  const authStack = new AuthStack(app, 'safewalk-app-auth-stack', { env });
-  const userStack = new UserStack(app, 'safewalk-app-user-stack', { env });
-  const notificationStack = new NotificationStack(app, 'safewalk-app-notification-stack', { env });
-  const sosStack = new SosStack(app, 'safewalk-app-sos-stack', {
-    env,
-    appUsersTable: userStack.appUsersTable,
-    pushNotificationTopic: notificationStack.pushNotificationTopic,
-  });
-  const heatmapStack = new HeatmapStack(app, 'safewalk-app-heatmap-stack', { env });
-  new ApiStack(app, 'safewalk-app-api-stack', {
-    env,
-    userPool: authStack.userPool,
-    userPoolClient: authStack.userPoolClient,
-    authHandler: authStack.authHandler,
-    userProfileHandler: userStack.userProfileHandler,
-    platformRegistrationHandler: userStack.platformRegistrationHandler,
-    notificationHandler: notificationStack.notificationHandler,
-    sosHandler: sosStack.sosHandler,
-    heatmapHandler: heatmapStack.heatmapHandler,
-  });
 }
+
+const stackName = (name: string) => devPrefix ? `${devPrefix}-${name}` : name;
+
+// Deploy with: cdk deploy --all -c devPrefix=<your-name>
+// Tear down with: cdk destroy --all -c devPrefix=<your-name>
+const authStack = new AuthStack(app, stackName('safewalk-app-auth-stack'), { env, devPrefix });
+const userStack = new UserStack(app, stackName('safewalk-app-user-stack'), { env, devPrefix });
+const notificationStack = new NotificationStack(app, stackName('safewalk-app-notification-stack'), { env, devPrefix });
+const sosStack = new SosStack(app, stackName('safewalk-app-sos-stack'), {
+  env,
+  devPrefix,
+  appUsersTable: userStack.appUsersTable,
+  pushNotificationTopic: notificationStack.pushNotificationTopic,
+});
+const heatmapStack = new HeatmapStack(app, stackName('safewalk-app-heatmap-stack'), { env, devPrefix });
+new ApiStack(app, stackName('safewalk-app-api-stack'), {
+  env,
+  devPrefix,
+  userPool: authStack.userPool,
+  userPoolClient: authStack.userPoolClient,
+  authHandler: authStack.authHandler,
+  userProfileHandler: userStack.userProfileHandler,
+  platformRegistrationHandler: userStack.platformRegistrationHandler,
+  notificationHandler: notificationStack.notificationHandler,
+  sosHandler: sosStack.sosHandler,
+  heatmapHandler: heatmapStack.heatmapHandler,
+});
