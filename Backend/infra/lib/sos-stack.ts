@@ -52,6 +52,7 @@ export class SosStack extends cdk.Stack {
       queueName: `${prefix}safewalk-sos-propagation-queue`,
       visibilityTimeout: cdk.Duration.seconds(60),
       retentionPeriod: cdk.Duration.hours(1),
+      receiveMessageWaitTime: cdk.Duration.seconds(20),
     });
 
     this.sosHandler = new NodejsFunction(this, 'app-sos-handler', {
