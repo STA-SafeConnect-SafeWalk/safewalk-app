@@ -137,7 +137,7 @@ async function handleAPIGatewayEvent(
       return handleUpdateSOS(event, sosTableName);
     case 'DELETE /sos/{sosId}':
       return handleCancelSOS(event, sosTableName);
-    case 'POST /webhook/sos': // SW 110
+    //case 'POST /webhook': // SW 110
       return handleWebhookSOS(event); // SW 110
     default:
       return jsonResponse(404, { error: 'Route not found' });
