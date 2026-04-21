@@ -35,19 +35,19 @@ export class NotificationStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
     let fcmPlatformAppArn = '';
 
     const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
-    if (!props?.devPrefix) {
-      if (!fs.existsSync(fcmKeyPath)) {
-        throw new Error(
-          `FCM service account key not found at ${fcmKeyPath}.`,
-        );
-      }
+    if (!fs.existsSync(fcmKeyPath)) {
+      throw new Error(
+        `FCM service account key not found at ${fcmKeyPath}.`,
+      );
+    }
 
+    {
       const fcmServiceAccountJson = fs.readFileSync(fcmKeyPath, 'utf-8');
 
       const snsPlatformAppHandler = new NodejsFunction(this, 'sns-platform-app-resource', {

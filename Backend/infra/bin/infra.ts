@@ -29,7 +29,7 @@ const stackName = (name: string) => devPrefix ? `${devPrefix}-${name}` : name;
 
 const authStack = new AuthStack(app, stackName('safewalk-app-auth-stack'), { env, devPrefix });
 const userStack = new UserStack(app, stackName('safewalk-app-user-stack'), { env, devPrefix });
-const notificationStack = new NotificationStack(app, stackName('safewalk-app-notification-stack'), { env, devPrefix });
+const notificationStack = new NotificationStack(app, 'safewalk-app-notification-stack', { env });
 const sosStack = new SosStack(app, stackName('safewalk-app-sos-stack'), {
   env,
   devPrefix,
