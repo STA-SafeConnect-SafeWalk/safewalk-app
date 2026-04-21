@@ -14,6 +14,7 @@ export interface ApiStackProps extends cdk.StackProps {
   platformRegistrationHandler: lambda.IFunction;
   notificationHandler: lambda.IFunction;
   sosHandler: lambda.IFunction;
+  heatmapHandler: lambda.IFunction;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -28,6 +29,7 @@ export class ApiStack extends cdk.Stack {
       platformRegistrationHandler,
       notificationHandler,
       sosHandler,
+      heatmapHandler,
     } = props;
 
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
@@ -78,6 +80,11 @@ export class ApiStack extends cdk.Stack {
     const sosLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'sos-integration',
       sosHandler,
+    );
+
+    const heatmapLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'heatmap-integration',
+      heatmapHandler,
     );
 
     /* API Routes – public (no authorizer) */
@@ -241,6 +248,36 @@ export class ApiStack extends cdk.Stack {
       path: '/sos/{sosId}',
       methods: [apigateway.HttpMethod.DELETE],
       integration: sosLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    /* Heatmap Routes */
+
+    httpApi.addRoutes({
+      path: '/heatmap',
+      methods: [apigateway.HttpMethod.GET],
+      integration: heatmapLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/heatmap/reports',
+      methods: [apigateway.HttpMethod.POST],
+      integration: heatmapLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/heatmap/reports',
+      methods: [apigateway.HttpMethod.GET],
+      integration: heatmapLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/heatmap/reports/{reportId}',
+      methods: [apigateway.HttpMethod.DELETE],
+      integration: heatmapLambdaIntegration,
       authorizer: jwtAuthorizer,
     });
 
