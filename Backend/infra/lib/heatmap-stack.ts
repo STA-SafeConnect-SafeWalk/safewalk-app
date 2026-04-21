@@ -80,7 +80,7 @@ export class HeatmapStack extends cdk.Stack {
         HEATMAP_REPORTS_TABLE_NAME: heatmapReportsTable.tableName,
         HEATMAP_PUBLIC_DATA_TABLE_NAME: heatmapPublicDataTable.tableName,
       },
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(60),
       memorySize: 256,
       logRetention: logs.RetentionDays.ONE_WEEK,
     });

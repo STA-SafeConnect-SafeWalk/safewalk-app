@@ -19,7 +19,10 @@ const MAX_REPORTS_PER_DAY = 50;
 const MAX_DESCRIPTION_LENGTH = 500;
 const MAX_RADIUS_KM = 10;
 const DEFAULT_RADIUS_KM = 2;
-const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_MIRRORS = [
+  { hostname: 'overpass.kumi.systems', path: '/api/interpreter' },
+  { hostname: 'overpass-api.de', path: '/api/interpreter' },
+];
 
 const REPORT_CATEGORIES = [
   'UNSAFE_AREA',
@@ -76,6 +79,14 @@ interface HeatmapCell {
   reportCounts: Partial<Record<ReportCategory, number>>;
   publicDataCounts: Partial<Record<PublicDataType, number>>;
   totalDataPoints: number;
+}
+
+interface PublicDataFetchResult {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  items: Record<string, any>[];
+  osmStatus: 'success' | 'cached' | 'error';
+  osmError?: string;
+  osmPointsFetched: number;
 }
 
 const getEnv = (name: string): string | undefined => process.env[name];
@@ -502,7 +513,7 @@ async function handleQueryHeatmap(
   const geohash5Cells = geohashesInBoundingBox(bbox.minLat, bbox.minLng, bbox.maxLat, bbox.maxLng, 5);
 
   // Query user reports and public data in parallel for each geohash5 cell
-  const [reportsByCell, publicDataByCell] = await Promise.all([
+  const [reportsByCell, publicDataResult] = await Promise.all([
     fetchAllReports(reportsTableName, geohash5Cells),
     fetchAllPublicData(publicDataTableName, geohash5Cells, bbox),
   ]);
@@ -525,7 +536,7 @@ async function handleQueryHeatmap(
   }
 
   // Process public data
-  for (const item of publicDataByCell) {
+  for (const item of publicDataResult.items) {
     const gh7 = item.geohash7 as string;
     if (!cellMap.has(gh7)) {
       cellMap.set(gh7, { reportCounts: {}, publicDataCounts: {} });
@@ -576,6 +587,14 @@ async function handleQueryHeatmap(
       cells,
       boundingBox: bbox,
       radiusKm,
+      geohash5CellsQueried: geohash5Cells.length,
+      userReportsFound: reportsByCell.length,
+      publicData: {
+        status: publicDataResult.osmStatus,
+        pointsFetched: publicDataResult.osmPointsFetched,
+        cachedItemsFound: publicDataResult.items.length,
+        ...(publicDataResult.osmError && { error: publicDataResult.osmError }),
+      },
       queriedAt: new Date().toISOString(),
     },
   });
@@ -618,9 +637,7 @@ async function fetchAllPublicData(
   tableName: string,
   geohash5Cells: string[],
   bbox: { minLat: number; minLng: number; maxLat: number; maxLng: number },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any[]> {
-  // Check cache freshness per geohash5 cell and fetch from Overpass if stale
+): Promise<PublicDataFetchResult> {
   const freshCells: string[] = [];
   const staleCells: string[] = [];
 
@@ -654,14 +671,20 @@ async function fetchAllPublicData(
     }),
   );
 
-  // Fetch from Overpass for stale cells (batch by overall bbox to minimize API calls)
+  let osmStatus: 'success' | 'cached' | 'error' = staleCells.length === 0 ? 'cached' : 'error';
+  let osmError: string | undefined;
+  let osmPointsFetched = 0;
+
   if (staleCells.length > 0) {
     try {
-      const osmData = await fetchOSMData(bbox);
+      const osmData = await fetchOSMDataWithRetry(bbox);
+      osmPointsFetched = osmData.length;
       await cacheOSMData(tableName, osmData, staleCells);
+      osmStatus = 'success';
+      console.log(`OSM fetch successful: ${osmData.length} points for ${staleCells.length} stale cells`);
     } catch (error) {
-      console.error('Error fetching OSM data:', error);
-      // Continue with whatever cached data we have
+      osmError = error instanceof Error ? error.message : String(error);
+      console.error('Error fetching OSM data after retries:', osmError);
     }
   }
 
@@ -688,7 +711,7 @@ async function fetchAllPublicData(
       allItems.push(...(result.value.Items ?? []));
     }
   }
-  return allItems;
+  return { items: allItems, osmStatus, osmError, osmPointsFetched };
 }
 
 // ---------------------------------------------------------------------------
@@ -710,46 +733,51 @@ async function fetchOSMData(bbox: {
 }): Promise<OSMDataPoint[]> {
   const bboxStr = `${bbox.minLat},${bbox.minLng},${bbox.maxLat},${bbox.maxLng}`;
 
-  // Overpass QL query: street lamps, lit/unlit ways, police, hospitals, emergency phones
-  const query = `
-[out:json][timeout:15];
-(
-  node["highway"="street_lamp"](${bboxStr});
-  way["lit"="yes"](${bboxStr});
-  way["lit"="no"](${bboxStr});
-  node["amenity"="police"](${bboxStr});
-  node["amenity"="hospital"](${bboxStr});
-  node["emergency"="phone"](${bboxStr});
-);
-out center;
-`;
+  // Split into separate lightweight queries to avoid timeouts in dense areas
+  const queries = [
+    `[out:json][timeout:25];node["highway"="street_lamp"](${bboxStr});out;`,
+    `[out:json][timeout:25];(way["lit"="yes"](${bboxStr});way["lit"="no"](${bboxStr}););out center;`,
+    `[out:json][timeout:25];(node["amenity"="police"](${bboxStr});node["amenity"="hospital"](${bboxStr});node["emergency"="phone"](${bboxStr}););out;`,
+  ];
 
-  const responseBody = await overpassRequest(query);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let parsed: any;
-  try {
-    parsed = JSON.parse(responseBody);
-  } catch {
-    console.error('Failed to parse Overpass response');
-    return [];
-  }
+  const results = await Promise.allSettled(
+    queries.map((q) => overpassRequest(q)),
+  );
 
   const dataPoints: OSMDataPoint[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const element of parsed.elements ?? []) {
-    const lat = element.lat ?? element.center?.lat;
-    const lng = element.lon ?? element.center?.lon;
-    if (lat === undefined || lng === undefined) continue;
+  for (const result of results) {
+    if (result.status !== 'fulfilled') {
+      console.warn('Overpass sub-query failed:', result.reason);
+      continue;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let parsed: any;
+    try {
+      parsed = JSON.parse(result.value);
+    } catch {
+      console.error('Failed to parse Overpass response');
+      continue;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const element of parsed.elements ?? []) {
+      const lat = element.lat ?? element.center?.lat;
+      const lng = element.lon ?? element.center?.lon;
+      if (lat === undefined || lng === undefined) continue;
 
-    const osmId = `${element.type}${element.id}`;
-    const type = classifyOSMElement(element);
-    if (type) {
-      dataPoints.push({ type, lat, lng, osmId });
+      const osmId = `${element.type}${element.id}`;
+      const type = classifyOSMElement(element);
+      if (type) {
+        dataPoints.push({ type, lat, lng, osmId });
+      }
     }
   }
 
-  console.log(`Fetched ${dataPoints.length} OSM data points for bbox ${bboxStr}`);
+  const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+  if (succeeded === 0) {
+    throw new Error('All Overpass sub-queries failed');
+  }
+
+  console.log(`Fetched ${dataPoints.length} OSM data points (${succeeded}/${queries.length} queries succeeded) for bbox ${bboxStr}`);
   return dataPoints;
 }
 
@@ -767,22 +795,43 @@ function classifyOSMElement(element: any): PublicDataType | null {
   return null;
 }
 
+async function fetchOSMDataWithRetry(
+  bbox: { minLat: number; minLng: number; maxLat: number; maxLng: number },
+): Promise<OSMDataPoint[]> {
+  let lastError: Error | undefined;
+  for (const mirror of OVERPASS_MIRRORS) {
+    try {
+      console.log(`Trying Overpass mirror: ${mirror.hostname}`);
+      currentMirror = mirror;
+      return await fetchOSMData(bbox);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Mirror ${mirror.hostname} failed: ${lastError.message}`);
+    }
+  }
+  throw lastError;
+}
+
+let currentMirror = OVERPASS_MIRRORS[0];
+
 function overpassRequest(query: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const postData = `data=${encodeURIComponent(query)}`;
+    const mirror = currentMirror;
 
     const options: https.RequestOptions = {
-      hostname: 'overpass-api.de',
+      hostname: mirror.hostname,
       port: 443,
-      path: '/api/interpreter',
+      path: mirror.path,
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Content-Length': Buffer.byteLength(postData),
+        'User-Agent': 'SafeWalk/1.0',
       },
     };
 
-    console.log('Sending Overpass API request');
+    console.log(`Sending Overpass request to ${mirror.hostname}`);
 
     const req = https.request(options, (res) => {
       let responseData = '';
@@ -790,8 +839,10 @@ function overpassRequest(query: string): Promise<string> {
         responseData += chunk;
       });
       res.on('end', () => {
-        console.log('Overpass response status:', res.statusCode);
-        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+        console.log(`Overpass ${mirror.hostname} response status:`, res.statusCode);
+        if (res.statusCode === 429 || res.statusCode === 504) {
+          reject(new Error(`Overpass API rate limited or timed out (${res.statusCode})`));
+        } else if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           resolve(responseData);
         } else {
           reject(new Error(`Overpass API returned status ${res.statusCode}: ${responseData.substring(0, 500)}`));
@@ -802,9 +853,9 @@ function overpassRequest(query: string): Promise<string> {
     req.on('error', reject);
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('Overpass API request timed out'));
+      reject(new Error(`Overpass API request timed out (${mirror.hostname})`));
     });
-    req.setTimeout(15000);
+    req.setTimeout(25000);
     req.write(postData);
     req.end();
   });
@@ -927,6 +978,6 @@ export {
   isValidCategory,
   sanitizeDescription,
   REPORT_CATEGORIES,
-  OVERPASS_API_URL,
+  OVERPASS_MIRRORS,
 };
 export type { ReportCategory, PublicDataType, HeatmapCell, OSMDataPoint };
