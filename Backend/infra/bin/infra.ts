@@ -27,8 +27,6 @@ if (!devPrefix) {
 
 const stackName = (name: string) => devPrefix ? `${devPrefix}-${name}` : name;
 
-// Deploy with: cdk deploy --all -c devPrefix=<your-name>
-// Tear down with: cdk destroy --all -c devPrefix=<your-name>
 const authStack = new AuthStack(app, stackName('safewalk-app-auth-stack'), { env, devPrefix });
 const userStack = new UserStack(app, stackName('safewalk-app-user-stack'), { env, devPrefix });
 const notificationStack = new NotificationStack(app, stackName('safewalk-app-notification-stack'), { env, devPrefix });
