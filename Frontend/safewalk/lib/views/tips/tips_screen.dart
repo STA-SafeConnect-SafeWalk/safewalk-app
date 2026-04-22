@@ -106,9 +106,10 @@ class _TipsScreenState extends State<TipsScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   children: [
-                    if (vm.tipOfTheDay != null)
+                    if (vm.tipOfTheDay != null && vm.showTipOfDayHighlighted)
                       _TipOfDayCard(tip: vm.tipOfTheDay!),
-                    if (vm.tipOfTheDay != null) const SizedBox(height: 14),
+                    if (vm.tipOfTheDay != null && vm.showTipOfDayHighlighted)
+                      const SizedBox(height: 14),
                     if (vm.isLoading)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 24),

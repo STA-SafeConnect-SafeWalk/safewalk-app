@@ -36,12 +36,16 @@ class TipsViewModel extends ChangeNotifier {
     return <String>[_allCategory, ...sorted];
   }
 
-  List<Tip> get filteredTips {
-    final byCategory = _selectedCategory == _allCategory
-        ? _tips
-        : _tips.where((tip) => tip.category == _selectedCategory).toList();
+  bool get showTipOfDayHighlighted => _selectedCategory == _allCategory;
 
-    return byCategory.where((tip) => tip.matchesSearch(_searchQuery)).toList();
+  List<Tip> get filteredTips {
+    final pool = _selectedCategory == _allCategory
+        ? _tips
+        : [if (_tipOfTheDay != null) _tipOfTheDay!, ..._tips]
+            .where((tip) => tip.category == _selectedCategory)
+            .toList();
+
+    return pool.where((tip) => tip.matchesSearch(_searchQuery)).toList();
   }
 
   Future<void> loadTips() async {
