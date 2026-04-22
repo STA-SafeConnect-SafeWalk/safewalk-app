@@ -25,7 +25,7 @@ export class NotificationStack extends cdk.Stack {
 
     const prefix = props?.devPrefix ? `${props.devPrefix}-` : '';
 
-    const deviceTokensTable = new dynamodb.Table(this, 'device-tokens-table', {
+    this.deviceTokensTable = new dynamodb.Table(this, 'device-tokens-table', {
       tableName: `${prefix}DeviceTokens`,
       partitionKey: {
         name: 'userId',
@@ -100,7 +100,7 @@ export class NotificationStack extends cdk.Stack {
       entry: path.join(__dirname, '../../lambda/notification-handler/index.ts'),
       projectRoot: path.join(__dirname, '../..'),
       environment: {
-        DEVICE_TOKENS_TABLE: deviceTokensTable.tableName,
+        DEVICE_TOKENS_TABLE: this.deviceTokensTable.tableName,
         FCM_PLATFORM_APP_ARN: fcmPlatformAppArn,
       },
       timeout: cdk.Duration.seconds(15),
@@ -108,7 +108,7 @@ export class NotificationStack extends cdk.Stack {
       logRetention: logs.RetentionDays.ONE_WEEK,
     });
 
-    deviceTokensTable.grantReadWriteData(this.notificationHandler);
+    this.deviceTokensTable.grantReadWriteData(this.notificationHandler);
 
     this.notificationHandler.addToRolePolicy(
       new iam.PolicyStatement({
