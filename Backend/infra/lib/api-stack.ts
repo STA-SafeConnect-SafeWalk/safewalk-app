@@ -14,6 +14,7 @@ export interface ApiStackProps extends cdk.StackProps {
   platformRegistrationHandler: lambda.IFunction;
   notificationHandler: lambda.IFunction;
   sosHandler: lambda.IFunction;
+  tipsHandler: lambda.IFunction;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -28,6 +29,7 @@ export class ApiStack extends cdk.Stack {
       platformRegistrationHandler,
       notificationHandler,
       sosHandler,
+      tipsHandler,
     } = props;
 
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
@@ -78,6 +80,11 @@ export class ApiStack extends cdk.Stack {
     const sosLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'sos-integration',
       sosHandler,
+    );
+
+    const tipsLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'tips-integration',
+      tipsHandler,
     );
 
     /* API Routes – public (no authorizer) */
@@ -241,6 +248,13 @@ export class ApiStack extends cdk.Stack {
       path: '/sos/{sosId}',
       methods: [apigateway.HttpMethod.DELETE],
       integration: sosLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/tips',
+      methods: [apigateway.HttpMethod.GET],
+      integration: tipsLambdaIntegration,
       authorizer: jwtAuthorizer,
     });
 

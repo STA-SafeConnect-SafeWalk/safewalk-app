@@ -4,6 +4,7 @@ import { AuthStack } from '../lib/auth-stack';
 import { UserStack } from '../lib/user-stack';
 import { NotificationStack } from '../lib/notification-stack';
 import { SosStack } from '../lib/sos-stack';
+import { TipsStack } from '../lib/tips-stack';
 import { ApiStack } from '../lib/api-stack';
 
 const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY'];
@@ -33,6 +34,10 @@ const sosStack = new SosStack(app, 'safewalk-app-sos-stack', {
   pushNotificationTopic: notificationStack.pushNotificationTopic,
 });
 
+const tipsStack = new TipsStack(app, 'safewalk-app-tips-stack', {
+  env,
+});
+
 new ApiStack(app, 'safewalk-app-api-stack', {
   env,
   userPool: authStack.userPool,
@@ -42,4 +47,5 @@ new ApiStack(app, 'safewalk-app-api-stack', {
   platformRegistrationHandler: userStack.platformRegistrationHandler,
   notificationHandler: notificationStack.notificationHandler,
   sosHandler: sosStack.sosHandler,
+  tipsHandler: tipsStack.tipsHandler,
 });
