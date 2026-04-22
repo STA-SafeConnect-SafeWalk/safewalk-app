@@ -31,6 +31,7 @@ const sosStack = new SosStack(app, 'safewalk-app-sos-stack', {
   env,
   appUsersTable: userStack.appUsersTable,
   pushNotificationTopic: notificationStack.pushNotificationTopic,
+  deviceTokensTable: notificationStack.deviceTokensTable,
 });
 
 new ApiStack(app, 'safewalk-app-api-stack', {

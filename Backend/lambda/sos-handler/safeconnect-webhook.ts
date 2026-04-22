@@ -1,4 +1,3 @@
-// SW 110
 import { createHmac, timingSafeEqual } from 'crypto';
 
 const TIMESTAMP_TOLERANCE_SECONDS = 300;
@@ -58,15 +57,6 @@ function verifySignature(rawBody: string, signature: string, timestamp: string, 
   return timingSafeEqual(expected, received);
 }
 
-/**
- * Verifies an incoming SafeConnect SOS webhook request.
- *
- * @param rawBody   The raw (unparsed) request body string. Must not be
- *                  re-serialised — any whitespace change breaks the signature.
- * @param headers   The request headers (case-insensitive lookup is applied).
- * @param webhookSecret  The shared secret associated with this platform,
- *                       obtained from your platform configuration.
- */
 export function verifySafeConnectWebhook(
   rawBody: string,
   headers: Record<string, string | string[] | undefined>,

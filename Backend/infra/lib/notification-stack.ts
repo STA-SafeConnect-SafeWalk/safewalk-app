@@ -14,6 +14,7 @@ import * as fs from 'fs';
 export class NotificationStack extends cdk.Stack {
   public readonly pushNotificationTopic: sns.Topic;
   public readonly notificationHandler: NodejsFunction;
+  public readonly deviceTokensTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -31,6 +32,8 @@ export class NotificationStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
+
+    this.deviceTokensTable = deviceTokensTable;
 
     const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
     const hasFcmKey = fs.existsSync(fcmKeyPath);

@@ -2,13 +2,15 @@ import { APIGatewayProxyEventV2, APIGatewayProxyResultV2, SQSEvent } from 'aws-l
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
+  BatchWriteCommand,
   GetCommand,
   PutCommand,
   UpdateCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { randomUUID, createHmac } from 'crypto'; // SW 110
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+import { randomUUID } from 'crypto';
 import * as https from 'https';
 import * as http from 'http';
 import { verifySafeConnectWebhook } from './safeconnect-webhook';
@@ -16,6 +18,7 @@ import { verifySafeConnectWebhook } from './safeconnect-webhook';
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 const sqsClient = new SQSClient({});
+const snsClient = new SNSClient({});
 
 const SOS_TTL_DAYS = 30;
 const DEFAULT_PROPAGATION_DELAY_SECONDS = 10;
@@ -55,15 +58,22 @@ interface PlatformLocationUpdateResponse {
   };
 }
 
-// SW 110
-interface WebhookEvent {
+interface WebhookTarget {
+  safeWalkId: string;
+  platformId: string;
+  platformUserId: string;
+}
+
+interface WebhookPayload {
   type: 'SOS_CREATED' | 'SOS_LOCATION_UPDATE' | 'SOS_CANCELLED';
   sosId: string;
   victim: {
     safeWalkId: string;
+    platformId: string;
     platformUserId: string;
     displayName: string;
   };
+  targets: WebhookTarget[];
   geoLocation?: {
     lat: number;
     lng: number;
@@ -137,8 +147,10 @@ async function handleAPIGatewayEvent(
       return handleUpdateSOS(event, sosTableName);
     case 'DELETE /sos/{sosId}':
       return handleCancelSOS(event, sosTableName);
-    case 'POST /webhook/sos': // SW 110
-      return handleWebhookSOS(event); // SW 110
+    case 'GET /sos/received':
+      return handleGetReceivedSOS(event);
+    case 'POST /webhook/sos':
+      return handleWebhookSOS(event);
     default:
       return jsonResponse(404, { error: 'Route not found' });
   }
@@ -265,8 +277,6 @@ async function handleTriggerSOS(
     // SOS is saved locally — propagation won't auto-trigger but user
     // can cancel and retry if needed.
   }
-
-  console.log("SOS triggered"); // SW 110
 
   console.log(`SOS ${sosId} created for user ${userId}, propagation in ${delaySeconds}s`);
   return jsonResponse(201, {
@@ -468,19 +478,46 @@ async function handleCancelSOS(
   });
 }
 
-// SW 110
+async function handleGetReceivedSOS(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const receivedSosTable = getEnv('RECEIVED_SOS_TABLE_NAME');
+  if (!receivedSosTable) return missingEnvResponse('RECEIVED_SOS_TABLE_NAME');
+
+  const result = await docClient.send(
+    new QueryCommand({
+      TableName: receivedSosTable,
+      IndexName: 'TargetUserIndex',
+      KeyConditionExpression: 'targetUserId = :uid',
+      ExpressionAttributeValues: { ':uid': userId },
+      ScanIndexForward: false,
+    }),
+  );
+
+  const items = (result.Items ?? []).map((item) => ({
+    sosId: item.sosId,
+    status: item.status,
+    victimDisplayName: item.victim?.displayName,
+    geoLocation: item.geoLocation,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  }));
+
+  return jsonResponse(200, { success: true, data: items });
+}
+
 async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
   const secret = process.env.WEBHOOK_SECRET;
 
-  console.log("WEBHOOK_SECRET exists:", !!process.env.WEBHOOK_SECRET); // SW 110
-
-
+  console.log("WEBHOOK_SECRET exists:", !!process.env.WEBHOOK_SECRET);
 
   if (!event.body) {
     return jsonResponse(400, { error: 'Missing body' });
   }
 
-  // SW 110
   const headers = Object.fromEntries(
     Object.entries(event.headers).map(([k, v]) => [k.toLowerCase(), v])
   );
@@ -495,46 +532,211 @@ async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
 
   const { payload } = result;
 
-  console.log('Received webhook:', payload.type);
-
   switch (payload.type) {
     case 'SOS_CREATED':
       return handleIncomingSOS(payload);
-
     case 'SOS_LOCATION_UPDATE':
       return handleIncomingLocationUpdate(payload);
-
     case 'SOS_CANCELLED':
       return handleIncomingCancel(payload);
-
     default:
       return jsonResponse(400, { error: 'Unknown event type' });
+
   }
 }
 
-// SW 110
-async function handleIncomingSOS(payload: WebhookEvent) {
-  console.log('🚨 SOS received from external platform:', payload.sosId);
+async function sendSosNotification(payload: WebhookPayload, message: { title: string; body: string }) {
+  const deviceTokensTable = getEnv('DEVICE_TOKENS_TABLE');
 
-  // z. B.:
-  // - in DB speichern
-  // - Push Notification senden
-  // - UI aktualisieren
+  if (!deviceTokensTable) {
+    console.error('DEVICE_TOKENS_TABLE not configured');
+    return;
+  }
+
+  for (const target of payload.targets) {
+    const targetUserId = target.platformUserId;
+    console.log(`Sending SOS notification to target user: ${targetUserId}`);
+
+    const devices = await docClient.send(
+      new QueryCommand({
+        TableName: deviceTokensTable,
+        KeyConditionExpression: 'userId = :uid',
+        ExpressionAttributeValues: {
+          ':uid': targetUserId,
+        },
+      }),
+    );
+
+    if (!devices.Items?.length) {
+      console.log(`No devices found for target user: ${targetUserId}, skipping`);
+      continue;
+    }
+
+    console.log(`Found ${devices.Items.length} device(s) for target user ${targetUserId}`);
+
+    const results = await Promise.allSettled(
+      devices.Items.map((device) =>
+        snsClient.send(
+          new PublishCommand({
+            TargetArn: device.endpointArn,
+            MessageStructure: 'json',
+            Message: JSON.stringify({
+              default: message.body,
+              GCM: JSON.stringify({
+                notification: {
+                  title: message.title,
+                  body: message.body,
+                },
+                data: {
+                  sosId: payload.sosId,
+                  type: payload.type,
+                },
+              }),
+            }),
+          }),
+        ),
+      ),
+    );
+
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        console.log(`  device[${i}]: publish OK, messageId=${r.value.MessageId}`);
+      } else {
+        console.error(`  device[${i}]: publish FAILED:`, r.reason);
+      }
+    });
+
+    const sent = results.filter((r) => r.status === 'fulfilled').length;
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    console.log(`Push for target ${targetUserId}: sent=${sent}, failed=${failed}`);
+  }
+}
+
+async function handleIncomingSOS(payload: WebhookPayload) {
+  const receivedSosTable = getEnv('RECEIVED_SOS_TABLE_NAME');
+  if (receivedSosTable) {
+    const now = new Date().toISOString();
+    const ttl = Math.floor(Date.now() / 1000) + SOS_TTL_DAYS * 24 * 60 * 60;
+    const victimId = payload.victim.platformUserId;
+
+    for (const target of payload.targets) {
+      const existing = await docClient.send(
+        new QueryCommand({
+          TableName: receivedSosTable,
+          IndexName: 'TargetUserIndex',
+          KeyConditionExpression: 'targetUserId = :tid',
+          FilterExpression: 'victim.platformUserId = :vid AND #s = :active',
+          ExpressionAttributeNames: { '#s': 'status' },
+          ExpressionAttributeValues: {
+            ':tid': target.platformUserId,
+            ':vid': victimId,
+            ':active': 'ACTIVE',
+          },
+        }),
+      );
+
+      for (const item of existing.Items ?? []) {
+        await docClient.send(
+          new UpdateCommand({
+            TableName: receivedSosTable,
+            Key: { sosId: item.sosId, targetUserId: item.targetUserId },
+            UpdateExpression: 'SET #s = :superseded, updatedAt = :now',
+            ExpressionAttributeNames: { '#s': 'status' },
+            ExpressionAttributeValues: {
+              ':superseded': 'SUPERSEDED',
+              ':now': now,
+            },
+          }),
+        );
+        console.log(`Superseded received SOS ${item.sosId} for target ${item.targetUserId}`);
+      }
+    }
+
+    const putRequests = payload.targets.map((target) => ({
+      PutRequest: {
+        Item: {
+          sosId: payload.sosId,
+          targetUserId: target.platformUserId,
+          status: 'ACTIVE',
+          victim: payload.victim,
+          geoLocation: payload.geoLocation,
+          createdAt: now,
+          updatedAt: now,
+          ttl,
+        },
+      },
+    }));
+
+    for (let i = 0; i < putRequests.length; i += 25) {
+      await docClient.send(
+        new BatchWriteCommand({
+          RequestItems: { [receivedSosTable]: putRequests.slice(i, i + 25) },
+        }),
+      );
+    }
+
+    console.log(`Stored ${putRequests.length} received SOS records for sosId ${payload.sosId}`);
+  }
+
+  const message = {
+    title: '🚨 SOS Alarm',
+    body: `SOS von ${payload.victim.displayName}`,
+  };
+  await sendSosNotification(payload, message);
+  return jsonResponse(200, { success: true });
+}
+
+async function handleIncomingLocationUpdate(payload: WebhookPayload) {
+  const receivedSosTable = getEnv('RECEIVED_SOS_TABLE_NAME');
+  if (receivedSosTable && payload.geoLocation) {
+    const now = new Date().toISOString();
+
+    for (const target of payload.targets) {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: receivedSosTable,
+          Key: { sosId: payload.sosId, targetUserId: target.platformUserId },
+          UpdateExpression: 'SET geoLocation = :geo, updatedAt = :now',
+          ExpressionAttributeValues: {
+            ':geo': payload.geoLocation,
+            ':now': now,
+          },
+        }),
+      );
+    }
+  }
 
   return jsonResponse(200, { success: true });
 }
 
-// SW 110
-async function handleIncomingLocationUpdate(payload: WebhookEvent) {
-  console.log('📍 Location update:', payload.geoLocation);
+async function handleIncomingCancel(payload: WebhookPayload) {
+  const receivedSosTable = getEnv('RECEIVED_SOS_TABLE_NAME');
+  if (receivedSosTable) {
+    const now = new Date().toISOString();
 
-  return jsonResponse(200, { success: true });
-}
+    for (const target of payload.targets) {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: receivedSosTable,
+          Key: { sosId: payload.sosId, targetUserId: target.platformUserId },
+          UpdateExpression: 'SET #s = :cancelled, updatedAt = :now',
+          ExpressionAttributeNames: { '#s': 'status' },
+          ExpressionAttributeValues: {
+            ':cancelled': 'CANCELLED',
+            ':now': now,
+          },
+        }),
+      );
+    }
 
-// SW 110
-async function handleIncomingCancel(payload: WebhookEvent) {
-  console.log('✅ SOS cancelled:', payload.sosId);
+    console.log(`Cancelled received SOS records for sosId ${payload.sosId}`);
+  }
 
+  const message = {
+    title: 'SOS Entwarnung',
+    body: `SOS von ${payload.victim.displayName} wurde abgebrochen.`,
+  };
+  await sendSosNotification(payload, message);
   return jsonResponse(200, { success: true });
 }
 
