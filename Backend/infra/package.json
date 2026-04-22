@@ -13,14 +13,14 @@
   "devDependencies": {
     "@types/jest": "^30",
     "@types/node": "^24.10.1",
-    "aws-cdk": "2.1101.0",
+    "aws-cdk": "^2.1118.3",
     "jest": "^30",
     "ts-jest": "^29",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.3"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.234.1",
+    "aws-cdk-lib": "^2.250.0",
     "constructs": "^10.0.0",
     "esbuild": "^0.27.2"
   }
