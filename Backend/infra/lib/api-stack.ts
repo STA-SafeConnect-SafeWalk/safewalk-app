@@ -252,6 +252,19 @@ export class ApiStack extends cdk.Stack {
         integration: sosLambdaIntegration,
         authorizer: jwtAuthorizer,
       });
+
+      httpApi.addRoutes({
+        path: '/sos/received',
+        methods: [apigateway.HttpMethod.GET],
+        integration: sosLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/webhook/sos',
+        methods: [apigateway.HttpMethod.POST],
+        integration: sosLambdaIntegration,
+      });
     }
 
     /* Heatmap routes */
@@ -290,19 +303,6 @@ export class ApiStack extends cdk.Stack {
         authorizer: jwtAuthorizer,
       });
     }
-
-    httpApi.addRoutes({
-      path: '/sos/received',
-      methods: [apigateway.HttpMethod.GET],
-      integration: sosLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
-
-    httpApi.addRoutes({
-      path: '/webhook/sos',
-      methods: [apigateway.HttpMethod.POST],
-      integration: sosLambdaIntegration,
-    });
 
     new cdk.CfnOutput(this, 'api-url', {
       value: httpApi.apiEndpoint,
