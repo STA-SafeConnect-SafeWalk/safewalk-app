@@ -17,6 +17,7 @@ Set these before running `cdk synth` / `cdk deploy` (see `.env_template`):
 | `PLATFORM_DOMAIN` | Base URL of the upstream SafeWalk platform API (e.g. `https://example.com/api`) |
 | `VENDOR_ID` | Platform vendor / partner identifier |
 | `API_KEY` | API key for authenticating with the platform (`x-api-key` header) |
+| `WEBHOOK_SECRET` | Webhook secret for authenticating receiving requests |
 
 > **Do not commit `.env`** – keep secrets in CI/CD variables or a secrets manager.
 

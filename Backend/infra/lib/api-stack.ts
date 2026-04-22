@@ -7,14 +7,16 @@ import * as apigatewayIntegrations from 'aws-cdk-lib/aws-apigatewayv2-integratio
 import { Construct } from 'constructs';
 
 export interface ApiStackProps extends cdk.StackProps {
+  devPrefix?: string;
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   authHandler: lambda.IFunction;
-  userProfileHandler: lambda.IFunction;
-  platformRegistrationHandler: lambda.IFunction;
-  notificationHandler: lambda.IFunction;
-  sosHandler: lambda.IFunction;
-  tipsHandler: lambda.IFunction;
+  userProfileHandler?: lambda.IFunction;
+  platformRegistrationHandler?: lambda.IFunction;
+  notificationHandler?: lambda.IFunction;
+  sosHandler?: lambda.IFunction;
+  heatmapHandler?: lambda.IFunction;
+  tipsHandler?: lambda.IFunction;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -22,6 +24,7 @@ export class ApiStack extends cdk.Stack {
     super(scope, id, props);
 
     const {
+      devPrefix,
       userPool,
       userPoolClient,
       authHandler,
@@ -29,11 +32,14 @@ export class ApiStack extends cdk.Stack {
       platformRegistrationHandler,
       notificationHandler,
       sosHandler,
+      heatmapHandler,
       tipsHandler,
     } = props;
 
+    const prefix = devPrefix ? `${devPrefix}-` : '';
+
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
-      apiName: 'safewalk-app-api',
+      apiName: `${prefix}safewalk-app-api`,
       description: 'SafeWalk App API',
       corsPreflight: {
         allowOrigins: ['*'],
@@ -55,39 +61,17 @@ export class ApiStack extends cdk.Stack {
       },
     );
 
-    /* Lambda Integrations */
+    /* Auth routes - always present */
 
     const authLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'auth-integration',
       authHandler,
     );
-
-    const userLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
-      'app-user-profile-integration',
-      userProfileHandler,
-    );
-
-    const platformLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
-      'platform-registration-integration',
-      platformRegistrationHandler,
-    );
-
-    const notificationLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
-      'notification-integration',
-      notificationHandler,
-    );
-
-    const sosLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
-      'sos-integration',
-      sosHandler,
-    );
-
+    
     const tipsLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'tips-integration',
       tipsHandler,
     );
-
-    /* API Routes – public (no authorizer) */
 
     httpApi.addRoutes({
       path: '/auth/sign-up',
@@ -131,125 +115,201 @@ export class ApiStack extends cdk.Stack {
       integration: authLambdaIntegration,
     });
 
-    /* API Routes – protected (JWT authorizer required) */
+    /* User profile routes */
 
-    httpApi.addRoutes({
-      path: '/me',
-      methods: [apigateway.HttpMethod.GET],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+    if (userProfileHandler && platformRegistrationHandler) {
+      const userLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'app-user-profile-integration',
+        userProfileHandler,
+      );
 
-    httpApi.addRoutes({
-      path: '/register',
-      methods: [apigateway.HttpMethod.POST],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      const platformLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'platform-registration-integration',
+        platformRegistrationHandler,
+      );
 
-    httpApi.addRoutes({
-      path: '/register/platform',
-      methods: [apigateway.HttpMethod.POST],
-      integration: platformLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/me',
+        methods: [apigateway.HttpMethod.GET],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/sharing-code',
-      methods: [apigateway.HttpMethod.GET],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/register',
+        methods: [apigateway.HttpMethod.POST],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/sharing-code',
-      methods: [apigateway.HttpMethod.POST],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/register/platform',
+        methods: [apigateway.HttpMethod.POST],
+        integration: platformLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/sharing-code/connect',
-      methods: [apigateway.HttpMethod.POST],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/sharing-code',
+        methods: [apigateway.HttpMethod.GET],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/contacts/connect-back',
-      methods: [apigateway.HttpMethod.POST],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/sharing-code',
+        methods: [apigateway.HttpMethod.POST],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    /* Trusted Contacts Routes */
+      httpApi.addRoutes({
+        path: '/sharing-code/connect',
+        methods: [apigateway.HttpMethod.POST],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/contacts',
-      methods: [apigateway.HttpMethod.GET],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/contacts/connect-back',
+        methods: [apigateway.HttpMethod.POST],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/contacts/{contactId}',
-      methods: [apigateway.HttpMethod.PATCH],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      /* Trusted Contacts Routes */
 
-    httpApi.addRoutes({
-      path: '/contacts/{contactId}',
-      methods: [apigateway.HttpMethod.DELETE],
-      integration: userLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/contacts',
+        methods: [apigateway.HttpMethod.GET],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    /* Push Notification Routes */
+      httpApi.addRoutes({
+        path: '/contacts/{contactId}',
+        methods: [apigateway.HttpMethod.PATCH],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/device/register',
-      methods: [apigateway.HttpMethod.POST],
-      integration: notificationLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/contacts/{contactId}',
+        methods: [apigateway.HttpMethod.DELETE],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+    }
 
-    httpApi.addRoutes({
-      path: '/device/unregister',
-      methods: [apigateway.HttpMethod.POST],
-      integration: notificationLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+    /* Push notification routes */
 
-    httpApi.addRoutes({
-      path: '/notifications/send',
-      methods: [apigateway.HttpMethod.POST],
-      integration: notificationLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+    if (notificationHandler) {
+      const notificationLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'notification-integration',
+        notificationHandler,
+      );
 
-    /* SOS Routes */
+      httpApi.addRoutes({
+        path: '/device/register',
+        methods: [apigateway.HttpMethod.POST],
+        integration: notificationLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/sos',
-      methods: [apigateway.HttpMethod.POST],
-      integration: sosLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/device/unregister',
+        methods: [apigateway.HttpMethod.POST],
+        integration: notificationLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
 
-    httpApi.addRoutes({
-      path: '/sos/{sosId}',
-      methods: [apigateway.HttpMethod.PATCH],
-      integration: sosLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+      httpApi.addRoutes({
+        path: '/notifications/send',
+        methods: [apigateway.HttpMethod.POST],
+        integration: notificationLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+    }
 
-    httpApi.addRoutes({
-      path: '/sos/{sosId}',
-      methods: [apigateway.HttpMethod.DELETE],
-      integration: sosLambdaIntegration,
-      authorizer: jwtAuthorizer,
-    });
+    /* SOS routes */
+
+    if (sosHandler) {
+      const sosLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'sos-integration',
+        sosHandler,
+      );
+
+      httpApi.addRoutes({
+        path: '/sos',
+        methods: [apigateway.HttpMethod.POST],
+        integration: sosLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/sos/{sosId}',
+        methods: [apigateway.HttpMethod.PATCH],
+        integration: sosLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/sos/{sosId}',
+        methods: [apigateway.HttpMethod.DELETE],
+        integration: sosLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/sos/received',
+        methods: [apigateway.HttpMethod.GET],
+        integration: sosLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/webhook/sos',
+        methods: [apigateway.HttpMethod.POST],
+        integration: sosLambdaIntegration,
+      });
+    }
+
+    /* Heatmap routes */
+
+    if (heatmapHandler) {
+      const heatmapLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'heatmap-integration',
+        heatmapHandler,
+      );
+
+      httpApi.addRoutes({
+        path: '/heatmap',
+        methods: [apigateway.HttpMethod.GET],
+        integration: heatmapLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/heatmap/reports',
+        methods: [apigateway.HttpMethod.POST],
+        integration: heatmapLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/heatmap/reports',
+        methods: [apigateway.HttpMethod.GET],
+        integration: heatmapLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/heatmap/reports/{reportId}',
+        methods: [apigateway.HttpMethod.DELETE],
+        integration: heatmapLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+    }
 
     httpApi.addRoutes({
       path: '/tips',

@@ -127,6 +127,6 @@ Frontend/safewalk/web/firebase-messaging-sw.js
 Frontend/safewalk/android/app/google-services.json
 Frontend/safewalk/ios/Runner/GoogleService-Info.plist
 
-# Node.js
-node_modules/
+# NodeJS
 Backend/node_modules/
+node_modules/
