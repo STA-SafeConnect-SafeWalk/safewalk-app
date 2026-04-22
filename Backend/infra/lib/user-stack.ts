@@ -6,16 +6,22 @@ import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
+export interface UserStackProps extends cdk.StackProps {
+  devPrefix?: string;
+}
+
 export class UserStack extends cdk.Stack {
   public readonly appUsersTable: dynamodb.Table;
   public readonly userProfileHandler: NodejsFunction;
   public readonly platformRegistrationHandler: NodejsFunction;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: UserStackProps) {
     super(scope, id, props);
 
+    const prefix = props?.devPrefix ? `${props.devPrefix}-` : '';
+
     this.appUsersTable = new dynamodb.Table(this, 'app-users-table', {
-      tableName: 'AppUsers',
+      tableName: `${prefix}AppUsers`,
       partitionKey: {
         name: 'safeWalkAppId',
         type: dynamodb.AttributeType.STRING,
@@ -35,7 +41,7 @@ export class UserStack extends cdk.Stack {
     });
 
     this.userProfileHandler = new NodejsFunction(this, 'app-user-profile-handler', {
-      functionName: 'app-user-profile-handler',
+      functionName: `${prefix}app-user-profile-handler`,
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/user-profile-handler/index.ts'),
@@ -54,7 +60,7 @@ export class UserStack extends cdk.Stack {
     this.appUsersTable.grantReadWriteData(this.userProfileHandler);
 
     this.platformRegistrationHandler = new NodejsFunction(this, 'platform-registration-handler', {
-      functionName: 'platform-registration-handler',
+      functionName: `${prefix}platform-registration-handler`,
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/platform-registration-handler/index.ts'),

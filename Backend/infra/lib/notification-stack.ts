@@ -11,16 +11,22 @@ import { Construct } from 'constructs';
 import * as path from 'path';
 import * as fs from 'fs';
 
+export interface NotificationStackProps extends cdk.StackProps {
+  devPrefix?: string;
+}
+
 export class NotificationStack extends cdk.Stack {
   public readonly pushNotificationTopic: sns.Topic;
   public readonly notificationHandler: NodejsFunction;
   public readonly deviceTokensTable: dynamodb.Table;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: NotificationStackProps) {
     super(scope, id, props);
 
+    const prefix = props?.devPrefix ? `${props.devPrefix}-` : '';
+
     const deviceTokensTable = new dynamodb.Table(this, 'device-tokens-table', {
-      tableName: 'DeviceTokens',
+      tableName: `${prefix}DeviceTokens`,
       partitionKey: {
         name: 'userId',
         type: dynamodb.AttributeType.STRING,
@@ -30,20 +36,23 @@ export class NotificationStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    this.deviceTokensTable = deviceTokensTable;
-
-    const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
-    const hasFcmKey = fs.existsSync(fcmKeyPath);
     let fcmPlatformAppArn = '';
 
-    if (hasFcmKey) {
+    const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
+    if (!fs.existsSync(fcmKeyPath)) {
+      throw new Error(
+        `FCM service account key not found at ${fcmKeyPath}.`,
+      );
+    }
+
+    {
       const fcmServiceAccountJson = fs.readFileSync(fcmKeyPath, 'utf-8');
 
       const snsPlatformAppHandler = new NodejsFunction(this, 'sns-platform-app-resource', {
-        functionName: 'sns-platform-app-resource',
+        functionName: `${prefix}sns-platform-app-resource`,
         runtime: lambda.Runtime.NODEJS_24_X,
         handler: 'index.handler',
         entry: path.join(__dirname, '../../lambda/sns-platform-app-resource/index.ts'),
@@ -73,7 +82,7 @@ export class NotificationStack extends cdk.Stack {
       const snsPlatformApp = new cdk.CustomResource(this, 'fcm-platform-app', {
         serviceToken: snsPlatformAppProvider.serviceToken,
         properties: {
-          Name: 'safewalk-fcm',
+          Name: `${prefix}safewalk-fcm`,
           Platform: 'GCM',
           PlatformCredential: fcmServiceAccountJson,
         },
@@ -83,12 +92,12 @@ export class NotificationStack extends cdk.Stack {
     }
 
     this.pushNotificationTopic = new sns.Topic(this, 'push-notification-topic', {
-      topicName: 'safewalk-push-notifications',
+      topicName: `${prefix}safewalk-push-notifications`,
       displayName: 'SafeWalk Internal Push Notifications',
     });
 
     this.notificationHandler = new NodejsFunction(this, 'notification-handler', {
-      functionName: 'notification-handler',
+      functionName: `${prefix}notification-handler`,
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/notification-handler/index.ts'),
