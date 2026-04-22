@@ -80,6 +80,14 @@ class ApiConstants {
   static String sosPropagate(String sosId) => '/sos/$sosId/propagate';
 
   // ---------------------------------------------------------------------------
+  // Live location endpoints (JWT required)
+  // ---------------------------------------------------------------------------
+
+  /// PUT  – Update my live location.
+  /// DELETE – Stop sharing my live location.
+  static const String location = '/location';
+
+  // ---------------------------------------------------------------------------
   // Push notification endpoints (JWT required)
   // ---------------------------------------------------------------------------
 

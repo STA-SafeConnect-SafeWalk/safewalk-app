@@ -31,7 +31,11 @@ class HomeViewModel extends ChangeNotifier {
   Duration _remaining = const Duration(seconds: 5);
   bool _isSubmittingSos = false;
 
-  bool _isSharingLocation = true;
+  bool _isSharingLocation = false;
+  bool _isTogglingLocationSharing = false;
+  Timer? _locationUpdateTimer;
+  bool _isLocationUpdateInFlight = false;
+  static const Duration _locationUpdateInterval = Duration(seconds: 15);
 
   bool _isLocating = false;
   bool _isGpsActive = false;
@@ -50,6 +54,7 @@ class HomeViewModel extends ChangeNotifier {
   SosScreenState get screenState => _screenState;
   bool get isSubmittingSos => _isSubmittingSos;
   bool get isSharingLocation => _isSharingLocation;
+  bool get isTogglingLocationSharing => _isTogglingLocationSharing;
 
   bool get isLocating => _isLocating;
   bool get isGpsActive => _isGpsActive;
@@ -139,9 +144,89 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  void toggleLocationSharingCard() {
-    _isSharingLocation = !_isSharingLocation;
+  Future<bool> enableLocationSharing() async {
+    if (_isTogglingLocationSharing) return false;
+    _isTogglingLocationSharing = true;
     notifyListeners();
+
+    try {
+      final hasLocation = await refreshLocation();
+      if (!hasLocation || _lat == null || _lng == null || _accuracy == null) {
+        return false;
+      }
+
+      final result = await _apiService.updateLiveLocation(
+        lat: _lat!,
+        lng: _lng!,
+        accuracy: _accuracy!,
+      );
+
+      if (!result.isSuccess) return false;
+
+      _isSharingLocation = true;
+      _startLocationUpdates();
+      return true;
+    } finally {
+      _isTogglingLocationSharing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> disableLocationSharing() async {
+    if (_isTogglingLocationSharing) return false;
+    _isTogglingLocationSharing = true;
+    notifyListeners();
+
+    try {
+      _stopLocationUpdates();
+      final result = await _apiService.stopLiveLocation();
+
+      if (!result.isSuccess) {
+        _startLocationUpdates();
+        return false;
+      }
+
+      _isSharingLocation = false;
+      return true;
+    } finally {
+      _isTogglingLocationSharing = false;
+      notifyListeners();
+    }
+  }
+
+  void _startLocationUpdates() {
+    _locationUpdateTimer?.cancel();
+    _locationUpdateTimer = Timer.periodic(_locationUpdateInterval, (_) {
+      unawaited(_sendLocationUpdate());
+    });
+  }
+
+  void _stopLocationUpdates() {
+    _locationUpdateTimer?.cancel();
+    _locationUpdateTimer = null;
+    _isLocationUpdateInFlight = false;
+  }
+
+  Future<void> _sendLocationUpdate() async {
+    if (_isLocationUpdateInFlight || !_isSharingLocation) return;
+    _isLocationUpdateInFlight = true;
+
+    try {
+      final hasLocation = await refreshLocation();
+      if (!hasLocation || _lat == null || _lng == null || _accuracy == null) {
+        return;
+      }
+
+      await _apiService.updateLiveLocation(
+        lat: _lat!,
+        lng: _lng!,
+        accuracy: _accuracy!,
+      );
+    } catch (e) {
+      debugPrint('[Location] Periodic update error: $e');
+    } finally {
+      _isLocationUpdateInFlight = false;
+    }
   }
 
   void startCountdown() {
@@ -574,6 +659,7 @@ class HomeViewModel extends ChangeNotifier {
   void dispose() {
     _countdownTimer?.cancel();
     _stopSosLocationUpdates();
+    _stopLocationUpdates();
     super.dispose();
   }
 }

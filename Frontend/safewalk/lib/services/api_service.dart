@@ -411,6 +411,29 @@ class ApiService {
   }
 
   // ===========================================================================
+  // LIVE LOCATION SHARING (JWT required)
+  // ===========================================================================
+
+  Future<ApiResult> updateLiveLocation({
+    required double lat,
+    required double lng,
+    required double accuracy,
+  }) async {
+    return _authenticatedRequest(
+      () => _client.put(
+        ApiConstants.location,
+        body: {'lat': lat, 'lng': lng, 'accuracy': accuracy},
+      ),
+    );
+  }
+
+  Future<ApiResult> stopLiveLocation() async {
+    return _authenticatedRequest(
+      () => _client.delete(ApiConstants.location),
+    );
+  }
+
+  // ===========================================================================
   // PUSH NOTIFICATIONS (JWT required)
   // ===========================================================================
 
