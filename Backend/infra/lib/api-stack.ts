@@ -16,6 +16,7 @@ export interface ApiStackProps extends cdk.StackProps {
   notificationHandler?: lambda.IFunction;
   sosHandler?: lambda.IFunction;
   heatmapHandler?: lambda.IFunction;
+  liveLocationHandler?: lambda.IFunction;
   tipsHandler: lambda.IFunction;
 }
 
@@ -33,6 +34,7 @@ export class ApiStack extends cdk.Stack {
       notificationHandler,
       sosHandler,
       heatmapHandler,
+      liveLocationHandler,
       tipsHandler,
     } = props;
 
@@ -314,6 +316,43 @@ export class ApiStack extends cdk.Stack {
         path: '/heatmap/reports/{reportId}',
         methods: [apigateway.HttpMethod.DELETE],
         integration: heatmapLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+    }
+
+    /* Live location routes */
+
+    if (liveLocationHandler) {
+      const liveLocationLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'live-location-integration',
+        liveLocationHandler,
+      );
+
+      httpApi.addRoutes({
+        path: '/location',
+        methods: [apigateway.HttpMethod.PUT],
+        integration: liveLocationLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/location',
+        methods: [apigateway.HttpMethod.DELETE],
+        integration: liveLocationLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/location/contacts',
+        methods: [apigateway.HttpMethod.GET],
+        integration: liveLocationLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/location/contacts/{safeWalkId}',
+        methods: [apigateway.HttpMethod.GET],
+        integration: liveLocationLambdaIntegration,
         authorizer: jwtAuthorizer,
       });
     }
