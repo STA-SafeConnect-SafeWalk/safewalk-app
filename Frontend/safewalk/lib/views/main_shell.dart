@@ -1,16 +1,18 @@
-// MainShell provides the bottom navigation bar that wraps the four main
-// screens (Home, Map, Contacts, Settings) after the user has logged in.
+// MainShell provides the bottom navigation bar that wraps the main
+// screens (Home, Map, Contacts, Tipps, Settings) after the user has logged in.
 //
 // It uses an [IndexedStack] so that each tab preserves its state when the
 // user switches between tabs.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:safewalk/viewmodels/contacts_viewmodel.dart';
 import 'package:safewalk/views/home/home_screen.dart';
 import 'package:safewalk/views/map/map_screen.dart';
 import 'package:safewalk/views/contacts/contacts_screen.dart';
 import 'package:safewalk/views/settings/settings_screen.dart';
+import 'package:safewalk/views/tips/tips_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -23,23 +25,38 @@ class _MainShellState extends State<MainShell> {
   /// Index of the currently selected tab.
   int _currentIndex = 0;
 
-  /// The four top-level screens shown inside the bottom navigation.
+  /// The top-level screens shown inside the bottom navigation.
   static const List<Widget> _screens = [
     HomeScreen(),
     MapScreen(),
     ContactsScreen(),
+    TipsScreen(),
     SettingsScreen(),
   ];
 
   /// Labels and icons for each tab.
-  static const List<BottomNavigationBarItem> _navItems = [
-    BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-    BottomNavigationBarItem(icon: Icon(Icons.map_outlined), label: 'Karte'),
-    BottomNavigationBarItem(
+  List<BottomNavigationBarItem> get _navItems => [
+    const BottomNavigationBarItem(
+      icon: Icon(Icons.home_outlined),
+      label: 'Home',
+    ),
+    const BottomNavigationBarItem(
+      icon: Icon(Icons.map_outlined),
+      label: 'Karte',
+    ),
+    const BottomNavigationBarItem(
       icon: Icon(Icons.contacts_outlined),
       label: 'Kontakte',
     ),
     BottomNavigationBarItem(
+      icon: SvgPicture.asset(
+        'assets/icons/tips_tab_icon.svg',
+        width: 20,
+        height: 20,
+      ),
+      label: 'Tipps',
+    ),
+    const BottomNavigationBarItem(
       icon: Icon(Icons.settings_outlined),
       label: 'Einstellungen',
     ),

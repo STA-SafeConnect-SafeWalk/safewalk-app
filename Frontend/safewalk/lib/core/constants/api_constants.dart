@@ -64,6 +64,9 @@ class ApiConstants {
   /// GET – List all trusted contacts.
   static const String contacts = '/contacts';
 
+  /// GET – Returns tip of the day and additional safety tips.
+  static const String tips = '/tips';
+
   /// POST – Trigger a new SOS alarm.
   static const String sos = '/sos';
 

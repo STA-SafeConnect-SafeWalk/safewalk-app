@@ -5,6 +5,7 @@ import { UserStack } from '../lib/user-stack';
 import { NotificationStack } from '../lib/notification-stack';
 import { SosStack } from '../lib/sos-stack';
 import { HeatmapStack } from '../lib/heatmap-stack';
+import { TipsStack } from '../lib/tips-stack';
 import { ApiStack } from '../lib/api-stack';
 
 const app = new cdk.App();
@@ -38,6 +39,9 @@ const sosStack = new SosStack(app, stackName('safewalk-app-sos-stack'), {
   deviceTokensTable: notificationStack.deviceTokensTable,
 });
 const heatmapStack = new HeatmapStack(app, stackName('safewalk-app-heatmap-stack'), { env, devPrefix });
+const tipsStack = new TipsStack(app, 'safewalk-app-tips-stack', {
+  env,
+});
 new ApiStack(app, stackName('safewalk-app-api-stack'), {
   env,
   devPrefix,
@@ -49,4 +53,5 @@ new ApiStack(app, stackName('safewalk-app-api-stack'), {
   notificationHandler: notificationStack.notificationHandler,
   sosHandler: sosStack.sosHandler,
   heatmapHandler: heatmapStack.heatmapHandler,
+  tipsHandler: tipsStack.tipsHandler,
 });

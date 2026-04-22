@@ -16,6 +16,7 @@ export interface ApiStackProps extends cdk.StackProps {
   notificationHandler?: lambda.IFunction;
   sosHandler?: lambda.IFunction;
   heatmapHandler?: lambda.IFunction;
+  tipsHandler?: lambda.IFunction;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -32,6 +33,7 @@ export class ApiStack extends cdk.Stack {
       notificationHandler,
       sosHandler,
       heatmapHandler,
+      tipsHandler,
     } = props;
 
     const prefix = devPrefix ? `${devPrefix}-` : '';
@@ -64,6 +66,11 @@ export class ApiStack extends cdk.Stack {
     const authLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'auth-integration',
       authHandler,
+    );
+    
+    const tipsLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+      'tips-integration',
+      tipsHandler,
     );
 
     httpApi.addRoutes({
@@ -303,6 +310,13 @@ export class ApiStack extends cdk.Stack {
         authorizer: jwtAuthorizer,
       });
     }
+
+    httpApi.addRoutes({
+      path: '/tips',
+      methods: [apigateway.HttpMethod.GET],
+      integration: tipsLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
 
     new cdk.CfnOutput(this, 'api-url', {
       value: httpApi.apiEndpoint,

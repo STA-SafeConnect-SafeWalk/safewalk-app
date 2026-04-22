@@ -18,6 +18,7 @@ import 'package:safewalk/viewmodels/login_viewmodel.dart';
 import 'package:safewalk/viewmodels/map_viewmodel.dart';
 import 'package:safewalk/viewmodels/contacts_viewmodel.dart';
 import 'package:safewalk/viewmodels/settings_viewmodel.dart';
+import 'package:safewalk/viewmodels/tips_viewmodel.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +46,9 @@ void main() {
         ChangeNotifierProvider(create: (_) => MapViewModel()),
         ChangeNotifierProvider(
           create: (_) => ContactsViewModel(apiService: apiService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => TipsViewModel(apiService: apiService),
         ),
         ChangeNotifierProvider(create: (_) => SettingsViewModel()),
       ],

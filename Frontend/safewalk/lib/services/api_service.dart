@@ -305,6 +305,11 @@ class ApiService {
     return _authenticatedRequest(() => _client.get(ApiConstants.contacts));
   }
 
+  /// Fetches the tip of the day and all additional tips.
+  Future<ApiResult> getTips() async {
+    return _authenticatedRequest(() => _client.get(ApiConstants.tips));
+  }
+
   /// Updates sharing settings for a specific contact.
   Future<ApiResult> updateContactSettings(
     String contactId, {
