@@ -16,7 +16,7 @@ export interface ApiStackProps extends cdk.StackProps {
   notificationHandler?: lambda.IFunction;
   sosHandler?: lambda.IFunction;
   heatmapHandler?: lambda.IFunction;
-  tipsHandler?: lambda.IFunction;
+  tipsHandler: lambda.IFunction;
 }
 
 export class ApiStack extends cdk.Stack {
