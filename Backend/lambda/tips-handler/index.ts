@@ -41,6 +41,28 @@ const getAuthenticatedUserId = (
   return ctx.authorizer?.jwt?.claims?.sub as string | undefined;
 };
 
+const seededShuffle = (size: number, seed: number): number[] => {
+  const indices = Array.from({ length: size }, (_, i) => i);
+  let s = seed;
+  for (let i = size - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices;
+};
+
+const getEpochOrder = (size: number, epoch: number): number[] => {
+  const order = seededShuffle(size, epoch);
+  if (size > 1) {
+    const previousOrder = seededShuffle(size, epoch - 1);
+    if (order[0] === previousOrder[size - 1]) {
+      [order[0], order[1]] = [order[1], order[0]];
+    }
+  }
+  return order;
+};
+
 const getDailyIndex = (size: number): number => {
   const now = new Date();
   const utcDayStamp = Date.UTC(
@@ -49,7 +71,10 @@ const getDailyIndex = (size: number): number => {
     now.getUTCDate(),
   );
   const dayNumber = Math.floor(utcDayStamp / 86400000);
-  return dayNumber % size;
+  const epoch = Math.floor(dayNumber / size);
+  const dayInEpoch = dayNumber % size;
+
+  return getEpochOrder(size, epoch)[dayInEpoch];
 };
 
 const toTipItem = (record: TipRecord): TipItem | null => {

@@ -105,6 +105,63 @@ describe('tips-handler', () => {
     ).toBe(false);
   });
 
+  it('cycles through all tips before repeating', async () => {
+    const tips = [
+      { tipId: 'tip-a', icon: 'a', title: 'A', description: 'd', category: 'c', isActive: true },
+      { tipId: 'tip-b', icon: 'b', title: 'B', description: 'd', category: 'c', isActive: true },
+      { tipId: 'tip-c', icon: 'c', title: 'C', description: 'd', category: 'c', isActive: true },
+      { tipId: 'tip-d', icon: 'd', title: 'D', description: 'd', category: 'c', isActive: true },
+      { tipId: 'tip-e', icon: 'e', title: 'E', description: 'd', category: 'c', isActive: true },
+    ];
+    ddbMock.on(ScanCommand).resolves({ Items: tips });
+
+    const size = tips.length;
+    const selectedIds: string[] = [];
+    const baseDate = new Date('2026-04-21T12:00:00Z');
+
+    for (let day = 0; day < size; day++) {
+      jest.setSystemTime(new Date(baseDate.getTime() + day * 86400000));
+      const result = (await handler(buildEvent('GET /tips', 'user-123'))) as {
+        statusCode: number;
+        body: string;
+      };
+      const body = JSON.parse(result.body);
+      selectedIds.push(body.data.tipOfTheDay.tipId);
+    }
+
+    const unique = new Set(selectedIds);
+    expect(unique.size).toBe(size);
+  });
+
+  it('never shows the same tip on consecutive days across epochs', async () => {
+    const tips = [
+      { tipId: 'tip-a', icon: 'a', title: 'A', description: 'd', category: 'c', isActive: true },
+      { tipId: 'tip-b', icon: 'b', title: 'B', description: 'd', category: 'c', isActive: true },
+      { tipId: 'tip-c', icon: 'c', title: 'C', description: 'd', category: 'c', isActive: true },
+    ];
+    ddbMock.on(ScanCommand).resolves({ Items: tips });
+
+    const size = tips.length;
+    const epochs = 4;
+    const totalDays = size * epochs;
+    const selectedIds: string[] = [];
+    const baseDate = new Date('2026-01-01T12:00:00Z');
+
+    for (let day = 0; day < totalDays; day++) {
+      jest.setSystemTime(new Date(baseDate.getTime() + day * 86400000));
+      const result = (await handler(buildEvent('GET /tips', 'user-123'))) as {
+        statusCode: number;
+        body: string;
+      };
+      const body = JSON.parse(result.body);
+      selectedIds.push(body.data.tipOfTheDay.tipId);
+    }
+
+    for (let i = 1; i < selectedIds.length; i++) {
+      expect(selectedIds[i]).not.toBe(selectedIds[i - 1]);
+    }
+  });
+
   it('filters out inactive tips', async () => {
     ddbMock.on(ScanCommand).resolves({
       Items: [
