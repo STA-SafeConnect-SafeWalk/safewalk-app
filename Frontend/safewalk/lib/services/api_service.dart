@@ -11,6 +11,8 @@
 //   - If a protected call returns 401 the service attempts a silent token
 //     refresh using the stored refreshToken.
 
+import 'dart:async';
+
 import 'package:safewalk/core/constants/api_constants.dart';
 import 'package:safewalk/core/network/api_client.dart';
 import 'package:safewalk/core/network/api_result.dart';
@@ -19,6 +21,8 @@ import 'package:safewalk/services/auth_service.dart';
 class ApiService {
   late final ApiClient _client;
   late final AuthService _authService;
+
+  Completer<bool>? _refreshCompleter;
 
   ApiService({ApiClient? client, AuthService? authService}) {
     _client =
@@ -61,10 +65,10 @@ class ApiService {
 
     var result = await request();
 
-    // If 401, try a silent refresh and retry once
     if (result.statusCode == 401) {
       final refreshed = await _tryRefreshToken();
       if (refreshed) {
+        await _ensureAuth();
         result = await request();
       }
     }
@@ -73,12 +77,30 @@ class ApiService {
   }
 
   /// Attempts to refresh the token silently. Returns `true` on success.
+  /// Concurrent callers share a single in-flight refresh request.
   Future<bool> _tryRefreshToken() async {
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+
+    _refreshCompleter = Completer<bool>();
+
+    try {
+      final success = await _doRefresh();
+      _refreshCompleter!.complete(success);
+      return success;
+    } catch (e) {
+      _refreshCompleter!.complete(false);
+      return false;
+    } finally {
+      _refreshCompleter = null;
+    }
+  }
+
+  Future<bool> _doRefresh() async {
     final storedRefreshToken = await _authService.refreshToken;
     if (storedRefreshToken == null || storedRefreshToken.isEmpty) return false;
 
-    // Temporarily clear auth header so the refresh call doesn't send an
-    // expired idToken.
     _client.authToken = null;
 
     final result = await _client.post(
