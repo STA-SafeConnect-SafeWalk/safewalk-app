@@ -42,14 +42,11 @@ export class NotificationStack extends cdk.Stack {
     let fcmPlatformAppArn = '';
 
     const fcmKeyPath = path.join(__dirname, '../fcm-service-account.json');
-    if (!fs.existsSync(fcmKeyPath)) {
-      throw new Error(
-        `FCM service account key not found at ${fcmKeyPath}.`,
-      );
-    }
+    const fcmServiceAccountJson = fs.existsSync(fcmKeyPath)
+      ? fs.readFileSync(fcmKeyPath, 'utf-8')
+      : (process.env.FCM_SERVICE_ACCOUNT_JSON ?? '');
 
     {
-      const fcmServiceAccountJson = fs.readFileSync(fcmKeyPath, 'utf-8');
 
       const snsPlatformAppHandler = new NodejsFunction(this, 'sns-platform-app-resource', {
         functionName: `${prefix}sns-platform-app-resource`,
