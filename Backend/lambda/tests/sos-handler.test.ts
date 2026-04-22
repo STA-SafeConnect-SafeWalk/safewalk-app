@@ -533,6 +533,152 @@ describe('sos-handler', () => {
   });
 
   // -----------------------------------------------------------------------
+  // POST /sos/{sosId}/propagate — Immediate propagation
+  // -----------------------------------------------------------------------
+
+  describe('POST /sos/{sosId}/propagate', () => {
+    it('should propagate a PENDING SOS immediately and return ACTIVE', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: {
+          sosId: 'sos-1',
+          userId: 'user-123',
+          safeWalkId: 'sw-id-123',
+          status: 'PENDING',
+          geoLocation: validGeoLocation,
+        },
+      });
+      ddbMock.on(UpdateCommand).resolves({});
+
+      setupHttpsMock(201, {
+        success: true,
+        data: {
+          sosId: 'platform-sos-1',
+          status: 'ACTIVE',
+          contactsNotified: 3,
+          createdAt: new Date().toISOString(),
+        },
+      });
+
+      const event = generateApiGatewayEvent(
+        'POST',
+        '/sos/sos-1/propagate',
+        undefined,
+        { sosId: 'sos-1' },
+      );
+
+      const result = await handler(event);
+      const body = JSON.parse(result.body);
+
+      expect(result.statusCode).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('ACTIVE');
+      expect(body.data.platformSosId).toBe('platform-sos-1');
+      expect(body.data.contactsNotified).toBe(3);
+    });
+
+    it('should return 409 if SOS is not PENDING', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: { sosId: 'sos-1', userId: 'user-123', status: 'ACTIVE' },
+      });
+
+      const event = generateApiGatewayEvent(
+        'POST',
+        '/sos/sos-1/propagate',
+        undefined,
+        { sosId: 'sos-1' },
+      );
+
+      const result = await handler(event);
+      expect(result.statusCode).toBe(409);
+    });
+
+    it('should return 409 if SOS is CANCELLED', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: { sosId: 'sos-1', userId: 'user-123', status: 'CANCELLED' },
+      });
+
+      const event = generateApiGatewayEvent(
+        'POST',
+        '/sos/sos-1/propagate',
+        undefined,
+        { sosId: 'sos-1' },
+      );
+
+      const result = await handler(event);
+      expect(result.statusCode).toBe(409);
+    });
+
+    it('should return 404 for non-existent SOS', async () => {
+      ddbMock.on(GetCommand).resolves({});
+
+      const event = generateApiGatewayEvent(
+        'POST',
+        '/sos/nonexistent/propagate',
+        undefined,
+        { sosId: 'nonexistent' },
+      );
+
+      const result = await handler(event);
+      expect(result.statusCode).toBe(404);
+    });
+
+    it('should return 403 for SOS owned by another user', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: { sosId: 'sos-1', userId: 'other-user', status: 'PENDING' },
+      });
+
+      const event = generateApiGatewayEvent(
+        'POST',
+        '/sos/sos-1/propagate',
+        undefined,
+        { sosId: 'sos-1' },
+      );
+
+      const result = await handler(event);
+      expect(result.statusCode).toBe(403);
+    });
+
+    it('should return 401 if not authenticated', async () => {
+      const event = {
+        ...generateApiGatewayEvent('POST', '/sos/sos-1/propagate', undefined, { sosId: 'sos-1' }),
+        requestContext: { http: { method: 'POST' }, authorizer: {} } as any,
+      } as any;
+
+      const result = await handler(event);
+      expect(result.statusCode).toBe(401);
+    });
+
+    it('should return 502 if platform returns failure', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: {
+          sosId: 'sos-1',
+          userId: 'user-123',
+          safeWalkId: 'sw-id-123',
+          status: 'PENDING',
+          geoLocation: validGeoLocation,
+        },
+      });
+      ddbMock.on(UpdateCommand).resolves({});
+
+      setupHttpsMock(201, { success: false });
+
+      const event = generateApiGatewayEvent(
+        'POST',
+        '/sos/sos-1/propagate',
+        undefined,
+        { sosId: 'sos-1' },
+      );
+
+      const result = await handler(event);
+      expect(result.statusCode).toBe(502);
+
+      const updateCalls = ddbMock.commandCalls(UpdateCommand);
+      expect(updateCalls.length).toBe(1);
+      expect(updateCalls[0].args[0].input.ExpressionAttributeValues?.[':status']).toBe('FAILED');
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // SQS Consumer — Delayed propagation
   // -----------------------------------------------------------------------
 

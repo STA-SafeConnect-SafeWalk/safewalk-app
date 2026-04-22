@@ -145,6 +145,8 @@ async function handleAPIGatewayEvent(
       return handleTriggerSOS(event, sosTableName, appUsersTableName);
     case 'PATCH /sos/{sosId}':
       return handleUpdateSOS(event, sosTableName);
+    case 'POST /sos/{sosId}/propagate':
+      return handleImmediatePropagate(event, sosTableName);
     case 'DELETE /sos/{sosId}':
       return handleCancelSOS(event, sosTableName);
     case 'GET /sos/received':
@@ -476,6 +478,108 @@ async function handleCancelSOS(
       cancelledAt: now,
     },
   });
+}
+
+async function handleImmediatePropagate(
+  event: APIGatewayProxyEventV2,
+  sosTableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const platformDomain = getEnv('PLATFORM_DOMAIN');
+  const apiKey = getEnv('API_KEY');
+  if (!platformDomain) return missingEnvResponse('PLATFORM_DOMAIN');
+  if (!apiKey) return missingEnvResponse('API_KEY');
+
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const sosId = event.pathParameters?.sosId;
+  if (!sosId) return jsonResponse(400, { error: 'sosId path parameter is required' });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let sosRecord: Record<string, any>;
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: sosTableName, Key: { sosId } }),
+    );
+    if (!result.Item) return jsonResponse(404, { error: 'SOS event not found' });
+    if (result.Item.userId !== userId) {
+      return jsonResponse(403, { error: 'Not authorized to propagate this SOS event' });
+    }
+    sosRecord = result.Item;
+  } catch (error) {
+    console.error('Error retrieving SOS record:', error);
+    return jsonResponse(500, { error: 'Failed to retrieve SOS event' });
+  }
+
+  if (sosRecord.status !== 'PENDING') {
+    return jsonResponse(409, {
+      error: 'SOS event is not pending',
+      currentStatus: sosRecord.status,
+    });
+  }
+
+  const now = new Date().toISOString();
+  try {
+    const platformResponse = await sendRequest<PlatformSOSResponse>(
+      `${platformDomain}/sos`,
+      'POST',
+      apiKey,
+      {
+        safeWalkId: sosRecord.safeWalkId,
+        geoLocation: sosRecord.geoLocation,
+      },
+    );
+
+    if (!platformResponse.success || !platformResponse.data?.sosId) {
+      await updateSOSStatus(sosTableName, sosId, 'FAILED', now);
+      return jsonResponse(502, { error: 'Platform propagation failed' });
+    }
+
+    await docClient.send(
+      new UpdateCommand({
+        TableName: sosTableName,
+        Key: { sosId },
+        UpdateExpression:
+          'SET #s = :active, platformSosId = :pid, contactsNotified = :cn, updatedAt = :now',
+        ConditionExpression: '#s = :pending',
+        ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: {
+          ':active': 'ACTIVE',
+          ':pending': 'PENDING',
+          ':pid': platformResponse.data.sosId,
+          ':cn': platformResponse.data.contactsNotified,
+          ':now': now,
+        },
+      }),
+    );
+
+    console.log(
+      `SOS ${sosId} immediately propagated → platform sosId ${platformResponse.data.sosId}, ` +
+        `${platformResponse.data.contactsNotified} contacts notified`,
+    );
+
+    return jsonResponse(200, {
+      success: true,
+      data: {
+        sosId,
+        status: 'ACTIVE',
+        platformSosId: platformResponse.data.sosId,
+        contactsNotified: platformResponse.data.contactsNotified,
+        propagatedAt: now,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'ConditionalCheckFailedException') {
+      return jsonResponse(409, { error: 'SOS event was cancelled or superseded during propagation' });
+    }
+    console.error(`Error propagating SOS ${sosId}:`, error);
+    try {
+      await updateSOSStatus(sosTableName, sosId, 'FAILED', now);
+    } catch (updateError) {
+      console.error(`Error marking SOS ${sosId} as FAILED:`, updateError);
+    }
+    return jsonResponse(502, { error: 'Platform propagation failed' });
+  }
 }
 
 async function handleGetReceivedSOS(

@@ -76,6 +76,9 @@ class ApiConstants {
   /// Returns the path for a specific SOS event: /sos/{sosId}
   static String sosById(String sosId) => '/sos/$sosId';
 
+  /// Returns the path to immediately propagate a pending SOS: /sos/{sosId}/propagate
+  static String sosPropagate(String sosId) => '/sos/$sosId/propagate';
+
   // ---------------------------------------------------------------------------
   // Push notification endpoints (JWT required)
   // ---------------------------------------------------------------------------

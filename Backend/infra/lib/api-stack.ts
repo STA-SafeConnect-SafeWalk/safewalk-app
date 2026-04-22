@@ -261,6 +261,13 @@ export class ApiStack extends cdk.Stack {
       });
 
       httpApi.addRoutes({
+        path: '/sos/{sosId}/propagate',
+        methods: [apigateway.HttpMethod.POST],
+        integration: sosLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
         path: '/sos/received',
         methods: [apigateway.HttpMethod.GET],
         integration: sosLambdaIntegration,

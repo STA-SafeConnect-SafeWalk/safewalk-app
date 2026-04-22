@@ -364,6 +364,13 @@ class ApiService {
     );
   }
 
+  /// Immediately propagates a pending SOS to the platform, skipping the delay.
+  Future<ApiResult> propagateSos(String sosId) async {
+    return _authenticatedRequest(
+      () => _client.post(ApiConstants.sosPropagate(sosId)),
+    );
+  }
+
   /// Updates the location of an active SOS alarm.
   Future<ApiResult> updateSosLocation({
     required String sosId,

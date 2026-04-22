@@ -188,26 +188,39 @@ class HomeViewModel extends ChangeNotifier {
     _resetToHome();
   }
 
-  Future<void> skipCountdownTimer() async {
+  void skipCountdownTimer() {
     if (_screenState != SosScreenState.countdown) return;
 
     _countdownTimer?.cancel();
     _remaining = Duration.zero;
     _countdownFinished = true;
     _sosError = null;
-    notifyListeners();
 
+    if (_cancelRequestedDuringCountdown) {
+      notifyListeners();
+      return;
+    }
+
+    _immediatePropagate();
+  }
+
+  void _immediatePropagate() {
     if (_cancelRequestedDuringCountdown) return;
 
-    await _onCountdownTimerFinished();
+    _screenState = SosScreenState.active;
+    _startSosLocationUpdates();
+    notifyListeners();
+
+    final currentSosId = _sosId;
+    if (currentSosId != null && currentSosId.isNotEmpty) {
+      unawaited(_apiService.propagateSos(currentSosId));
+    }
   }
 
   Future<void> _createSosImmediately() async {
     if (_isCreatingSos) return;
 
     _isCreatingSos = true;
-    _isSubmittingSos = true;
-    notifyListeners();
 
     final initialLocation = await _loadLiveLocationSnapshot();
     _initialSosLocation = initialLocation;
