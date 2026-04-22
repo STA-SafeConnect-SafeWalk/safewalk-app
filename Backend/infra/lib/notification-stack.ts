@@ -18,6 +18,7 @@ export interface NotificationStackProps extends cdk.StackProps {
 export class NotificationStack extends cdk.Stack {
   public readonly pushNotificationTopic: sns.Topic;
   public readonly notificationHandler: NodejsFunction;
+  public readonly deviceTokensTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props?: NotificationStackProps) {
     super(scope, id, props);

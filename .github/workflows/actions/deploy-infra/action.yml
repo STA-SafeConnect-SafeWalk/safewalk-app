@@ -6,6 +6,8 @@ inputs:
     required: true
   api-key:
     required: true
+  webhook-secret:
+    required: true
   platform-domain:
     required: true
   aws-account-id:
@@ -67,6 +69,7 @@ runs:
       working-directory: Backend/infra
       env:
         API_KEY: ${{ inputs.api-key }}
+        WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
         PLATFORM_DOMAIN: ${{ inputs.platform-domain }}
         VENDOR_ID: ${{ inputs.vendor-id }}
       run: npx cdk diff --all
@@ -77,6 +80,7 @@ runs:
       working-directory: Backend/infra
       env:
         API_KEY: ${{ inputs.api-key }}
+        WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
         PLATFORM_DOMAIN: ${{ inputs.platform-domain }}
         VENDOR_ID: ${{ inputs.vendor-id }}
       run: npx cdk deploy --all --require-approval never

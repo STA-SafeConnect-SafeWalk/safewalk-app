@@ -17,7 +17,7 @@ const env = {
 };
 
 if (!devPrefix) {
-  const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY'];
+  const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY', 'WEBHOOK_SECRET'];
   for (const name of required) {
     if (!process.env[name]) {
       throw new Error(`Missing required env var: ${name}`);
@@ -35,6 +35,7 @@ const sosStack = new SosStack(app, stackName('safewalk-app-sos-stack'), {
   devPrefix,
   appUsersTable: userStack.appUsersTable,
   pushNotificationTopic: notificationStack.pushNotificationTopic,
+  deviceTokensTable: notificationStack.deviceTokensTable,
 });
 const heatmapStack = new HeatmapStack(app, stackName('safewalk-app-heatmap-stack'), { env, devPrefix });
 new ApiStack(app, stackName('safewalk-app-api-stack'), {

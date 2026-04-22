@@ -291,6 +291,19 @@ export class ApiStack extends cdk.Stack {
       });
     }
 
+    httpApi.addRoutes({
+      path: '/sos/received',
+      methods: [apigateway.HttpMethod.GET],
+      integration: sosLambdaIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: '/webhook/sos',
+      methods: [apigateway.HttpMethod.POST],
+      integration: sosLambdaIntegration,
+    });
+
     new cdk.CfnOutput(this, 'api-url', {
       value: httpApi.apiEndpoint,
       description: 'HTTP API Gateway endpoint URL',

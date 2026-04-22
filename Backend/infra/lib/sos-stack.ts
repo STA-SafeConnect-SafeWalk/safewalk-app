@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sns from 'aws-cdk-lib/aws-sns';
@@ -13,6 +14,7 @@ export interface SosStackProps extends cdk.StackProps {
   devPrefix?: string;
   appUsersTable: dynamodb.Table;
   pushNotificationTopic: sns.Topic;
+  deviceTokensTable: dynamodb.Table;
 }
 
 export class SosStack extends cdk.Stack {
@@ -21,8 +23,7 @@ export class SosStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: SosStackProps) {
     super(scope, id, props);
 
-    const { appUsersTable, pushNotificationTopic } = props;
-    const prefix = props.devPrefix ? `${props.devPrefix}-` : '';
+    const { appUsersTable, pushNotificationTopic, deviceTokensTable } = props;
 
     const sosEventsTable = new dynamodb.Table(this, 'app-sos-events-table', {
       tableName: `${prefix}AppSOSEvents`,
@@ -39,6 +40,34 @@ export class SosStack extends cdk.Stack {
       indexName: 'UserIndex',
       partitionKey: {
         name: 'userId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'createdAt',
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const receivedSosEventsTable = new dynamodb.Table(this, 'app-received-sos-events-table', {
+      tableName: 'AppReceivedSOSEvents',
+      partitionKey: {
+        name: 'sosId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'targetUserId',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    receivedSosEventsTable.addGlobalSecondaryIndex({
+      indexName: 'TargetUserIndex',
+      partitionKey: {
+        name: 'targetUserId',
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: {
@@ -67,8 +96,11 @@ export class SosStack extends cdk.Stack {
         QUEUE_URL: sosPropagationQueue.queueUrl,
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
         API_KEY: process.env.API_KEY || '',
+        WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
         PROPAGATION_DELAY_SECONDS: '10',
         PUSH_NOTIFICATION_TOPIC_ARN: pushNotificationTopic.topicArn,
+        DEVICE_TOKENS_TABLE: deviceTokensTable.tableName,
+        RECEIVED_SOS_TABLE_NAME: receivedSosEventsTable.tableName,
       },
       timeout: cdk.Duration.seconds(30),
       memorySize: 128,
@@ -76,9 +108,18 @@ export class SosStack extends cdk.Stack {
     });
 
     sosEventsTable.grantReadWriteData(this.sosHandler);
+    receivedSosEventsTable.grantReadWriteData(this.sosHandler);
     appUsersTable.grantReadData(this.sosHandler);
+    deviceTokensTable.grantReadData(this.sosHandler);
     sosPropagationQueue.grantSendMessages(this.sosHandler);
     pushNotificationTopic.grantPublish(this.sosHandler);
+
+    this.sosHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['sns:Publish'],
+        resources: ['*'],
+      }),
+    );
 
     this.sosHandler.addEventSource(
       new SqsEventSource(sosPropagationQueue, {
