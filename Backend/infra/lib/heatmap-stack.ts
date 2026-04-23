@@ -6,20 +6,14 @@ import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
-export interface HeatmapStackProps extends cdk.StackProps {
-  devPrefix?: string;
-}
-
 export class HeatmapStack extends cdk.Stack {
   public readonly heatmapHandler: NodejsFunction;
 
-  constructor(scope: Construct, id: string, props?: HeatmapStackProps) {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const prefix = props?.devPrefix ? `${props.devPrefix}-` : '';
-
     const heatmapReportsTable = new dynamodb.Table(this, 'heatmap-reports-table', {
-      tableName: `${prefix}HeatmapReports`,
+      tableName: 'HeatmapReports',
       partitionKey: {
         name: 'geohash5',
         type: dynamodb.AttributeType.STRING,
@@ -56,7 +50,7 @@ export class HeatmapStack extends cdk.Stack {
     });
 
     const heatmapPublicDataTable = new dynamodb.Table(this, 'heatmap-public-data-table', {
-      tableName: `${prefix}HeatmapPublicDataCache`,
+      tableName: 'HeatmapPublicDataCache',
       partitionKey: {
         name: 'geohash5',
         type: dynamodb.AttributeType.STRING,
@@ -71,7 +65,7 @@ export class HeatmapStack extends cdk.Stack {
     });
 
     this.heatmapHandler = new NodejsFunction(this, 'heatmap-handler', {
-      functionName: `${prefix}heatmap-handler`,
+      functionName: 'heatmap-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/heatmap-handler/index.ts'),

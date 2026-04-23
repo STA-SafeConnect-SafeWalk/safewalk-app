@@ -2,7 +2,25 @@
   "name": "safewalk-app-backend",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "test": "cd lambda && npm test",
+    "test:e2e": "npx playwright test",
+    "test:all": "npm run test && npm run test:e2e"
+  },
   "dependencies": {
     "esbuild": "^0.27.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.709.0",
+    "@aws-sdk/client-dynamodb": "^3.709.0",
+    "@aws-sdk/client-sns": "^3.709.0",
+    "@aws-sdk/client-sqs": "^3.709.0",
+    "@aws-sdk/lib-dynamodb": "^3.709.0",
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.10.0",
+    "aws-sdk-client-mock": "^4.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.3"
   }
 }

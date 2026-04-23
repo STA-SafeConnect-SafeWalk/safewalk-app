@@ -11,7 +11,6 @@ import { Construct } from 'constructs';
 import * as path from 'path';
 
 export interface SosStackProps extends cdk.StackProps {
-  devPrefix?: string;
   appUsersTable: dynamodb.Table;
   pushNotificationTopic: sns.Topic;
   deviceTokensTable: dynamodb.Table;
@@ -26,7 +25,7 @@ export class SosStack extends cdk.Stack {
     const { appUsersTable, pushNotificationTopic, deviceTokensTable } = props;
 
     const sosEventsTable = new dynamodb.Table(this, 'app-sos-events-table', {
-      tableName: `AppSOSEvents`,
+      tableName: 'AppSOSEvents',
       partitionKey: {
         name: 'sosId',
         type: dynamodb.AttributeType.STRING,
@@ -78,14 +77,14 @@ export class SosStack extends cdk.Stack {
     });
 
     const sosPropagationQueue = new sqs.Queue(this, 'sos-propagation-queue', {
-      queueName: `safewalk-sos-propagation-queue`,
+      queueName: 'safewalk-sos-propagation-queue',
       visibilityTimeout: cdk.Duration.seconds(60),
       retentionPeriod: cdk.Duration.hours(1),
       receiveMessageWaitTime: cdk.Duration.seconds(20),
     });
 
     this.sosHandler = new NodejsFunction(this, 'app-sos-handler', {
-      functionName: `app-sos-handler`,
+      functionName: 'app-sos-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/sos-handler/index.ts'),

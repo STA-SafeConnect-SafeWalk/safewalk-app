@@ -7,7 +7,6 @@ import { Construct } from 'constructs';
 import * as path from 'path';
 
 export interface LiveLocationStackProps extends cdk.StackProps {
-  devPrefix?: string;
   appUsersTable: dynamodb.Table;
 }
 
@@ -18,10 +17,9 @@ export class LiveLocationStack extends cdk.Stack {
     super(scope, id, props);
 
     const { appUsersTable } = props;
-    const prefix = props.devPrefix ? `${props.devPrefix}-` : '';
 
     const liveLocationsTable = new dynamodb.Table(this, 'live-locations-table', {
-      tableName: `${prefix}LiveLocations`,
+      tableName: 'LiveLocations',
       partitionKey: {
         name: 'safeWalkId',
         type: dynamodb.AttributeType.STRING,
@@ -33,7 +31,7 @@ export class LiveLocationStack extends cdk.Stack {
     });
 
     this.liveLocationHandler = new NodejsFunction(this, 'live-location-handler', {
-      functionName: `${prefix}live-location-handler`,
+      functionName: 'live-location-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/live-location-handler/index.ts'),

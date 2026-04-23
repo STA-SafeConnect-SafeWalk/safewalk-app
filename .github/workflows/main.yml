@@ -39,17 +39,17 @@ jobs:
         with:
           script: |
             const message = `## PR Title Format Check Failed
-            
+
             Your PR title does not match the required conventional commit format.
-            
+
             **Expected format:** \`<type>[(scope)]: [SW-XXX] <description>\`
-            
+
             **Valid types:** build, chore, ci, config, docs, feat, fix, perf, refactor, revert, style, test
-            
+
             **Scope:** Optional, alphanumeric
-            
+
             **Kanban reference:** Optional, format \`[SW-XXX]\`
-            
+
             Please update your PR title to match this format.`;
 
             github.rest.issues.createComment({
@@ -78,9 +78,31 @@ jobs:
             backend:
               - 'Backend/**'
 
+  test-backend:
+    name: Test Backend
+    needs: detect-backend-changes
+    if: needs.detect-backend-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install lambda dependencies
+        working-directory: Backend/lambda
+        run: npm ci
+
+      - name: Run lambda unit tests
+        working-directory: Backend/lambda
+        run: npm test
+
   deploy-infra:
     name: Deploy Infrastructure
-    needs: detect-backend-changes
+    needs: [detect-backend-changes, test-backend]
     if: |
       github.event_name != 'pull_request' &&
       needs.detect-backend-changes.outputs.backend == 'true'
