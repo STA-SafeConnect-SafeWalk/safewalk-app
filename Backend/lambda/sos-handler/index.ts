@@ -628,7 +628,7 @@ async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
 
   const rawBody = event.body ?? '';
 
-  const result = verifySafeConnectWebhook(rawBody, event.headers, secret);
+  const result = verifySafeConnectWebhook(rawBody, event.headers, secret!);
 
    if (!result.valid) {
     return jsonResponse(401, { error: 'Invalid signature' });
