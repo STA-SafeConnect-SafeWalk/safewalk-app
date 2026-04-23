@@ -141,29 +141,86 @@ class _HomeView extends StatelessWidget {
                 title: statusTitle,
                 subtitle: vm.bottomInfoText,
                 liveEnabled: vm.isSharingLocation,
-                onTap: vm.toggleLocationSharingCard,
+                isLoading: vm.isTogglingLocationSharing,
+                onTap: vm.isTogglingLocationSharing
+                    ? null
+                    : () => _confirmToggleLocationSharing(context, vm),
               ),
               const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  footerText,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.42,
-                    color: vm.locationError != null
-                        ? const Color(0xFFB00020)
-                        : const Color(0x99362B3E),
+              SizedBox(
+                height: 36,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    footerText,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.42,
+                      color: vm.locationError != null
+                          ? const Color(0xFFB00020)
+                          : const Color(0x99362B3E),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmToggleLocationSharing(
+    BuildContext context,
+    HomeViewModel vm,
+  ) async {
+    final enabling = !vm.isSharingLocation;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          enabling
+              ? 'Standort teilen aktivieren?'
+              : 'Standort teilen deaktivieren?',
+        ),
+        content: Text(
+          enabling
+              ? 'Dein Standort wird mit deinen Notfallkontakten geteilt.'
+              : 'Dein Standort wird nicht mehr mit deinen Notfallkontakten geteilt.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(enabling ? 'Aktivieren' : 'Deaktivieren'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final success = enabling
+        ? await vm.enableLocationSharing()
+        : await vm.disableLocationSharing();
+
+    if (!success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabling
+                ? 'Standortfreigabe konnte nicht aktiviert werden.'
+                : 'Standortfreigabe konnte nicht deaktiviert werden.',
+          ),
+        ),
+      );
+    }
   }
 
   void _showRiskInfo(BuildContext context) {
@@ -417,13 +474,15 @@ class _ShareStatusCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.liveEnabled,
-    required this.onTap,
+    this.isLoading = false,
+    this.onTap,
   });
 
   final String title;
   final String subtitle;
   final bool liveEnabled;
-  final VoidCallback onTap;
+  final bool isLoading;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -500,29 +559,38 @@ class _ShareStatusCard extends StatelessWidget {
                   color: const Color(0x80FFFFFF),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: statusDot,
-                        borderRadius: BorderRadius.circular(999),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _kTeal,
+                        ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: statusDot,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            liveEnabled ? 'LIVE' : 'AUS',
+                            style: const TextStyle(
+                              color: _kPurpleText,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      liveEnabled ? 'LIVE' : 'AUS',
-                      style: const TextStyle(
-                        color: _kPurpleText,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
