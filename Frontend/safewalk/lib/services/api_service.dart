@@ -332,6 +332,64 @@ class ApiService {
     return _authenticatedRequest(() => _client.get(ApiConstants.tips));
   }
 
+  /// Retrieves map metadata such as available report categories and layer types.
+  Future<ApiResult> getHeatmapMetadata() async {
+    return _authenticatedRequest(
+      () => _client.get(ApiConstants.heatmapMetadata),
+    );
+  }
+
+  /// Queries heatmap cells around a center point.
+  Future<ApiResult> getHeatmap({
+    required double lat,
+    required double lng,
+    double? radiusKm,
+  }) async {
+    final query = <String, dynamic>{'lat': lat, 'lng': lng};
+    if (radiusKm != null) {
+      query['radiusKm'] = radiusKm;
+    }
+
+    return _authenticatedRequest(
+      () => _client.get(ApiConstants.heatmap, queryParameters: query),
+    );
+  }
+
+  /// Submits a user safety report for the map heatmap.
+  Future<ApiResult> submitHeatmapReport({
+    required double lat,
+    required double lng,
+    required String category,
+    String? description,
+  }) async {
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.heatmapReports,
+        body: {
+          'lat': lat,
+          'lng': lng,
+          'category': category,
+          if (description != null && description.trim().isNotEmpty)
+            'description': description.trim(),
+        },
+      ),
+    );
+  }
+
+  /// Lists reports created by the currently authenticated user.
+  Future<ApiResult> getOwnHeatmapReports() async {
+    return _authenticatedRequest(
+      () => _client.get(ApiConstants.heatmapReports),
+    );
+  }
+
+  /// Deletes one of the authenticated user's own map reports.
+  Future<ApiResult> deleteHeatmapReport(String reportId) async {
+    return _authenticatedRequest(
+      () => _client.delete(ApiConstants.heatmapReportById(reportId)),
+    );
+  }
+
   /// Updates sharing settings for a specific contact.
   Future<ApiResult> updateContactSettings(
     String contactId, {
@@ -428,9 +486,7 @@ class ApiService {
   }
 
   Future<ApiResult> stopLiveLocation() async {
-    return _authenticatedRequest(
-      () => _client.delete(ApiConstants.location),
-    );
+    return _authenticatedRequest(() => _client.delete(ApiConstants.location));
   }
 
   // ===========================================================================

@@ -47,6 +47,16 @@ const REPORT_CATEGORY_WEIGHTS: Record<ReportCategory, number> = {
   CRIME_INCIDENT: -3,
 };
 
+const REPORT_CATEGORY_LABELS: Record<ReportCategory, string> = {
+  SAFE_AREA: 'Sicherer Bereich',
+  WELL_LIT: 'Gut beleuchtet',
+  HIGH_FOOT_TRAFFIC: 'Hohe Personenfrequenz',
+  POORLY_LIT: 'Schlecht beleuchtet',
+  LOW_FOOT_TRAFFIC: 'Geringe Personenfrequenz',
+  UNSAFE_AREA: 'Unsicherer Bereich',
+  CRIME_INCIDENT: 'Kriminalitaetsvorfall',
+};
+
 type PublicDataType =
   | 'STREET_LAMP'
   | 'LIT_WAY'
@@ -62,6 +72,24 @@ const PUBLIC_DATA_WEIGHTS: Record<PublicDataType, number> = {
   POLICE_STATION: 1,
   HOSPITAL: 0.5,
   EMERGENCY_PHONE: 0.5,
+};
+
+const PUBLIC_DATA_LABELS: Record<PublicDataType, string> = {
+  STREET_LAMP: 'Strassenlaternen',
+  LIT_WAY: 'Beleuchtete Wege',
+  UNLIT_WAY: 'Unbeleuchtete Wege',
+  POLICE_STATION: 'Polizeistationen',
+  HOSPITAL: 'Krankenhaeuser',
+  EMERGENCY_PHONE: 'Notruftelefone',
+};
+
+const PUBLIC_DATA_ICON_KEYS: Record<PublicDataType, string> = {
+  STREET_LAMP: 'street_lamp',
+  LIT_WAY: 'lit_way',
+  UNLIT_WAY: 'unlit_way',
+  POLICE_STATION: 'police_station',
+  HOSPITAL: 'hospital',
+  EMERGENCY_PHONE: 'emergency_phone',
 };
 
 interface SubmitReportRequest {
@@ -243,6 +271,10 @@ export const handler = async (event: any): Promise<APIGatewayProxyResultV2> => {
 async function handleAPIGatewayEvent(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> {
+  if (event.routeKey === 'GET /heatmap/metadata') {
+    return handleHeatmapMetadata(event);
+  }
+
   const reportsTableName = getEnv('HEATMAP_REPORTS_TABLE_NAME');
   if (!reportsTableName) return missingEnvResponse('HEATMAP_REPORTS_TABLE_NAME');
 
@@ -261,6 +293,42 @@ async function handleAPIGatewayEvent(
     default:
       return jsonResponse(404, { error: 'Route not found' });
   }
+}
+
+async function handleHeatmapMetadata(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const publicDataLayers = (Object.keys(PUBLIC_DATA_WEIGHTS) as PublicDataType[]).map((key) => ({
+    key,
+    label: PUBLIC_DATA_LABELS[key],
+    weight: PUBLIC_DATA_WEIGHTS[key],
+    iconKey: PUBLIC_DATA_ICON_KEYS[key],
+  }));
+
+  const reportCategories = REPORT_CATEGORIES.map((key) => ({
+    key,
+    label: REPORT_CATEGORY_LABELS[key],
+    weight: REPORT_CATEGORY_WEIGHTS[key],
+  }));
+
+  return jsonResponse(200, {
+    success: true,
+    data: {
+      publicDataLayers,
+      reportCategories,
+      defaults: {
+        radiusKm: DEFAULT_RADIUS_KM,
+        maxRadiusKm: MAX_RADIUS_KM,
+        maxReportsPerDay: MAX_REPORTS_PER_DAY,
+        maxDescriptionLength: MAX_DESCRIPTION_LENGTH,
+        reportTtlDays: REPORT_TTL_DAYS,
+        publicDataTtlHours: PUBLIC_DATA_TTL_HOURS,
+      },
+    },
+  });
 }
 
 // /post/heatmap/reports — Submit a new report
