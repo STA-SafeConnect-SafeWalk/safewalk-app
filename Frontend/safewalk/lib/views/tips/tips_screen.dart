@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:safewalk/models/tip.dart';
+import 'package:safewalk/services/headphone_service.dart';
 import 'package:safewalk/viewmodels/tips_viewmodel.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -50,6 +52,7 @@ class _TipsScreenState extends State<TipsScreen> {
                 ),
               ),
             ),
+            if (kDebugMode) _DebugHeadphoneToggle(vm: vm),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
@@ -106,6 +109,9 @@ class _TipsScreenState extends State<TipsScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   children: [
+                    if (vm.headphonesConnected)
+                      _HeadphoneBanner(tip: TipsViewModel.headphoneTip),
+                    if (vm.headphonesConnected) const SizedBox(height: 14),
                     if (vm.tipOfTheDay != null && vm.showTipOfDayHighlighted)
                       _TipOfDayCard(tip: vm.tipOfTheDay!),
                     if (vm.tipOfTheDay != null && vm.showTipOfDayHighlighted)
@@ -370,5 +376,127 @@ class _TipIcon extends StatelessWidget {
       default:
         return Icons.tips_and_updates_outlined;
     }
+  }
+}
+
+class _DebugHeadphoneToggle extends StatelessWidget {
+  const _DebugHeadphoneToggle({required this.vm});
+
+  final TipsViewModel vm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+      child: Row(
+        children: [
+          const Icon(Icons.bug_report, size: 14, color: _kMutedText),
+          const SizedBox(width: 6),
+          const Text(
+            'Debug:',
+            style: TextStyle(fontSize: 12, color: _kMutedText),
+          ),
+          const SizedBox(width: 8),
+          Switch(
+            value: vm.headphonesConnected,
+            activeColor: _kPrimary,
+            onChanged: (value) {
+              context.read<HeadphoneService>().debugSetConnected(value);
+            },
+          ),
+          const Text(
+            'Kopfhörer simulieren',
+            style: TextStyle(fontSize: 12, color: _kMutedText),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeadphoneBanner extends StatelessWidget {  const _HeadphoneBanner({required this.tip});
+
+  final Tip tip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE65100), Color(0xFFF57C00)],
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33E65100),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.headphones, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              const Text(
+                'Achtung',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.visibility_outlined,
+                    color: Color(0xFFE65100),
+                    size: 20,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tip.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      tip.description,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

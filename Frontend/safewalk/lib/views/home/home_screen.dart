@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:safewalk/services/headphone_service.dart';
 import 'package:safewalk/viewmodels/home_viewmodel.dart';
 
 const Color _kPurpleText = Color(0xFF362B3E);
@@ -59,6 +60,9 @@ class _HomeView extends StatelessWidget {
             ? 'Dein Standort wird mit deinen Notfallkontakten geteilt'
             : 'Dein Standort wird aktuell nicht geteilt');
 
+    final headphonesOn =
+        context.watch<HeadphoneService>().isConnected;
+
     return Container(
       key: const ValueKey('home-state'),
       color: _kLightBg,
@@ -75,7 +79,7 @@ class _HomeView extends StatelessWidget {
                   color: _kPurpleText,
                 ),
               ),
-              const SizedBox(height: 24),
+              _HeadphoneChip(visible: headphonesOn),
               const Text(
                 'Geringes\nGefahrenpotenzial',
                 textAlign: TextAlign.center,
@@ -112,9 +116,9 @@ class _HomeView extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               _HomeSosButton(onTap: vm.startCountdown),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               const Text(
                 'SOS Notfall',
                 style: TextStyle(
@@ -123,15 +127,15 @@ class _HomeView extends StatelessWidget {
                   color: _kPurpleText,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 18),
                 child: Text(
                   'Drücke den SOS Knopf, um den Alarm auszulösen. Du kannst den Alarm innerhalb von 5 Sekunden abbrechen.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 14,
-                    height: 1.42,
+                    fontSize: 13,
+                    height: 1.4,
                     color: Color(0x99362B3E),
                   ),
                 ),
@@ -990,6 +994,52 @@ class _SwipeToConfirmSliderState extends State<_SwipeToConfirmSlider> {
           ),
         );
       },
+    );
+  }
+}
+
+// Animates in/out when headphones are detected.
+class _HeadphoneChip extends StatelessWidget {
+  const _HeadphoneChip({required this.visible});
+
+  final bool visible;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      child: AnimatedOpacity(
+        opacity: visible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        child: visible
+            ? Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xFFFFB74D), width: 1),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.headphones, size: 15, color: Color(0xFFE65100)),
+                    SizedBox(width: 6),
+                    Text(
+                      'Kopfhörer aktiv · Bleib wachsam',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFE65100),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : const SizedBox.shrink(),
+      ),
     );
   }
 }
