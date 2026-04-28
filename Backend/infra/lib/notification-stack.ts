@@ -11,22 +11,16 @@ import { Construct } from 'constructs';
 import * as path from 'path';
 import * as fs from 'fs';
 
-export interface NotificationStackProps extends cdk.StackProps {
-  devPrefix?: string;
-}
-
 export class NotificationStack extends cdk.Stack {
   public readonly pushNotificationTopic: sns.Topic;
   public readonly notificationHandler: NodejsFunction;
   public readonly deviceTokensTable: dynamodb.Table;
 
-  constructor(scope: Construct, id: string, props?: NotificationStackProps) {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const prefix = props?.devPrefix ? `${props.devPrefix}-` : '';
-
     this.deviceTokensTable = new dynamodb.Table(this, 'device-tokens-table', {
-      tableName: `${prefix}DeviceTokens`,
+      tableName: 'DeviceTokens',
       partitionKey: {
         name: 'userId',
         type: dynamodb.AttributeType.STRING,
@@ -47,9 +41,8 @@ export class NotificationStack extends cdk.Stack {
       : (process.env.FCM_SERVICE_ACCOUNT_JSON ?? '');
 
     {
-
       const snsPlatformAppHandler = new NodejsFunction(this, 'sns-platform-app-resource', {
-        functionName: `${prefix}sns-platform-app-resource`,
+        functionName: 'sns-platform-app-resource',
         runtime: lambda.Runtime.NODEJS_24_X,
         handler: 'index.handler',
         entry: path.join(__dirname, '../../lambda/sns-platform-app-resource/index.ts'),
@@ -79,7 +72,7 @@ export class NotificationStack extends cdk.Stack {
       const snsPlatformApp = new cdk.CustomResource(this, 'fcm-platform-app', {
         serviceToken: snsPlatformAppProvider.serviceToken,
         properties: {
-          Name: `${prefix}safewalk-fcm`,
+          Name: 'safewalk-fcm',
           Platform: 'GCM',
           PlatformCredential: fcmServiceAccountJson,
         },
@@ -89,12 +82,12 @@ export class NotificationStack extends cdk.Stack {
     }
 
     this.pushNotificationTopic = new sns.Topic(this, 'push-notification-topic', {
-      topicName: `${prefix}safewalk-push-notifications`,
+      topicName: 'safewalk-push-notifications',
       displayName: 'SafeWalk Internal Push Notifications',
     });
 
     this.notificationHandler = new NodejsFunction(this, 'notification-handler', {
-      functionName: `${prefix}notification-handler`,
+      functionName: 'notification-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/notification-handler/index.ts'),

@@ -7,7 +7,6 @@ import * as apigatewayIntegrations from 'aws-cdk-lib/aws-apigatewayv2-integratio
 import { Construct } from 'constructs';
 
 export interface ApiStackProps extends cdk.StackProps {
-  devPrefix?: string;
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   authHandler: lambda.IFunction;
@@ -25,7 +24,6 @@ export class ApiStack extends cdk.Stack {
     super(scope, id, props);
 
     const {
-      devPrefix,
       userPool,
       userPoolClient,
       authHandler,
@@ -38,10 +36,8 @@ export class ApiStack extends cdk.Stack {
       tipsHandler,
     } = props;
 
-    const prefix = devPrefix ? `${devPrefix}-` : '';
-
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
-      apiName: `${prefix}safewalk-app-api`,
+      apiName: 'safewalk-app-api',
       description: 'SafeWalk App API',
       corsPreflight: {
         allowOrigins: ['*'],
@@ -69,7 +65,7 @@ export class ApiStack extends cdk.Stack {
       'auth-integration',
       authHandler,
     );
-    
+
     const tipsLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
       'tips-integration',
       tipsHandler,
@@ -133,6 +129,20 @@ export class ApiStack extends cdk.Stack {
       httpApi.addRoutes({
         path: '/me',
         methods: [apigateway.HttpMethod.GET],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/me',
+        methods: [apigateway.HttpMethod.PATCH],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/me',
+        methods: [apigateway.HttpMethod.DELETE],
         integration: userLambdaIntegration,
         authorizer: jwtAuthorizer,
       });

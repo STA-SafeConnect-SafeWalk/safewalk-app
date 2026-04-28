@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:safewalk/app.dart';
 import 'package:safewalk/services/api_service.dart';
+import 'package:safewalk/services/headphone_service.dart';
 import 'package:safewalk/viewmodels/home_viewmodel.dart';
 import 'package:safewalk/viewmodels/login_viewmodel.dart';
 import 'package:safewalk/viewmodels/map_viewmodel.dart';
@@ -35,7 +36,10 @@ void main() {
             create: (_) => ContactsViewModel(apiService: apiService),
           ),
           ChangeNotifierProvider(
-            create: (_) => TipsViewModel(apiService: apiService),
+            create: (_) => TipsViewModel(
+              apiService: apiService,
+              headphoneService: HeadphoneService(),
+            ),
           ),
           ChangeNotifierProvider(create: (_) => SettingsViewModel()),
         ],

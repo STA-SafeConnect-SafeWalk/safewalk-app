@@ -1,11 +1,46 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:safewalk/models/tip.dart';
 import 'package:safewalk/services/api_service.dart';
+import 'package:safewalk/services/headphone_service.dart';
 
 class TipsViewModel extends ChangeNotifier {
-  TipsViewModel({required ApiService apiService}) : _apiService = apiService;
+  TipsViewModel({
+    required ApiService apiService,
+    required HeadphoneService headphoneService,
+  })  : _apiService = apiService,
+        _headphoneService = headphoneService {
+    _headphoneSubscription = _headphoneService.onChanged.listen((connected) {
+      _headphonesConnected = connected;
+      notifyListeners();
+    });
+    _headphonesConnected = _headphoneService.isConnected;
+  }
 
   final ApiService _apiService;
+  final HeadphoneService _headphoneService;
+  StreamSubscription<bool>? _headphoneSubscription;
+
+  bool _headphonesConnected = false;
+  bool get headphonesConnected => _headphonesConnected;
+
+  static const Tip headphoneTip = Tip(
+    tipId: 'headphone-awareness',
+    icon: 'visibility',
+    title: 'Kopfhörer erkannt',
+    description:
+        'Du trägst gerade Kopfhörer. Achte besonders auf deine Umgebung – '
+        'du könntest wichtige Geräusche wie Verkehr oder Warnrufe überhören. '
+        'Erwäge, die Lautstärke zu reduzieren oder einen Transparenzmodus zu nutzen.',
+    category: 'Aufmerksamkeit',
+  );
+
+  @override
+  void dispose() {
+    _headphoneSubscription?.cancel();
+    super.dispose();
+  }
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;

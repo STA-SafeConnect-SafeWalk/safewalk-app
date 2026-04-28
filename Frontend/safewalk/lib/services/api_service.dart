@@ -594,4 +594,21 @@ class ApiService {
       () => _client.post(ApiConstants.registerPlatform),
     );
   }
+
+  // ===========================================================================
+  // USER PROFILE MANAGEMENT (JWT required)
+  // ===========================================================================
+
+  /// Updates the authenticated user's display name.
+  Future<ApiResult> updateDisplayName(String displayName) async {
+    return _authenticatedRequest(
+      () => _client.patch(ApiConstants.me, body: {'displayName': displayName}),
+    );
+  }
+
+  /// Permanently deletes the authenticated user's account.
+  /// Removes both the DynamoDB profile and the Cognito user on the backend.
+  Future<ApiResult> deleteAccount() async {
+    return _authenticatedRequest(() => _client.delete(ApiConstants.me));
+  }
 }

@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib/core';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -7,7 +8,8 @@ import { Construct } from 'constructs';
 import * as path from 'path';
 
 export interface UserStackProps extends cdk.StackProps {
-  devPrefix?: string;
+  userPoolId: string;
+  userPoolArn: string;
 }
 
 export class UserStack extends cdk.Stack {
@@ -15,13 +17,11 @@ export class UserStack extends cdk.Stack {
   public readonly userProfileHandler: NodejsFunction;
   public readonly platformRegistrationHandler: NodejsFunction;
 
-  constructor(scope: Construct, id: string, props?: UserStackProps) {
+  constructor(scope: Construct, id: string, props: UserStackProps) {
     super(scope, id, props);
 
-    const prefix = props?.devPrefix ? `${props.devPrefix}-` : '';
-
     this.appUsersTable = new dynamodb.Table(this, 'app-users-table', {
-      tableName: `${prefix}AppUsers`,
+      tableName: 'AppUsers',
       partitionKey: {
         name: 'safeWalkAppId',
         type: dynamodb.AttributeType.STRING,
@@ -41,13 +41,14 @@ export class UserStack extends cdk.Stack {
     });
 
     this.userProfileHandler = new NodejsFunction(this, 'app-user-profile-handler', {
-      functionName: `${prefix}app-user-profile-handler`,
+      functionName: 'app-user-profile-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/user-profile-handler/index.ts'),
       projectRoot: path.join(__dirname, '../..'),
       environment: {
         TABLE_NAME: this.appUsersTable.tableName,
+        COGNITO_USER_POOL_ID: props.userPoolId,
         PLATFORM_DOMAIN: process.env.PLATFORM_DOMAIN || '',
         VENDOR_ID: process.env.VENDOR_ID || '',
         API_KEY: process.env.API_KEY || '',
@@ -59,8 +60,18 @@ export class UserStack extends cdk.Stack {
 
     this.appUsersTable.grantReadWriteData(this.userProfileHandler);
 
+    this.userProfileHandler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'cognito-idp:AdminUpdateUserAttributes',
+          'cognito-idp:AdminDeleteUser',
+        ],
+        resources: [props.userPoolArn],
+      }),
+    );
+
     this.platformRegistrationHandler = new NodejsFunction(this, 'platform-registration-handler', {
-      functionName: `${prefix}platform-registration-handler`,
+      functionName: 'platform-registration-handler',
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: 'index.handler',
       entry: path.join(__dirname, '../../lambda/platform-registration-handler/index.ts'),

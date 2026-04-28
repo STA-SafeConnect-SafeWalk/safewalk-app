@@ -11,46 +11,39 @@ import { ApiStack } from '../lib/api-stack';
 
 const app = new cdk.App();
 
-const devPrefix = app.node.tryGetContext('devPrefix') as string | undefined;
-
 const env = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-if (!devPrefix) {
-  const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY', 'WEBHOOK_SECRET'];
-  for (const name of required) {
-    if (!process.env[name]) {
-      throw new Error(`Missing required env var: ${name}`);
-    }
+const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY', 'WEBHOOK_SECRET'];
+for (const name of required) {
+  if (!process.env[name]) {
+    throw new Error(`Missing required env var: ${name}`);
   }
 }
 
-const stackName = (name: string) => devPrefix ? `${devPrefix}-${name}` : name;
-
-const authStack = new AuthStack(app, stackName('safewalk-app-auth-stack'), { env, devPrefix });
-const userStack = new UserStack(app, stackName('safewalk-app-user-stack'), { env, devPrefix });
-const notificationStack = new NotificationStack(app, 'safewalk-app-notification-stack', { env });
-const sosStack = new SosStack(app, stackName('safewalk-app-sos-stack'), {
+const authStack = new AuthStack(app, 'safewalk-app-auth-stack', { env });
+const userStack = new UserStack(app, 'safewalk-app-user-stack', {
   env,
-  devPrefix,
+  userPoolId: authStack.userPool.userPoolId,
+  userPoolArn: authStack.userPool.userPoolArn,
+});
+const notificationStack = new NotificationStack(app, 'safewalk-app-notification-stack', { env });
+const sosStack = new SosStack(app, 'safewalk-app-sos-stack', {
+  env,
   appUsersTable: userStack.appUsersTable,
   pushNotificationTopic: notificationStack.pushNotificationTopic,
   deviceTokensTable: notificationStack.deviceTokensTable,
 });
-const heatmapStack = new HeatmapStack(app, stackName('safewalk-app-heatmap-stack'), { env, devPrefix });
-const liveLocationStack = new LiveLocationStack(app, stackName('safewalk-app-live-location-stack'), {
+const heatmapStack = new HeatmapStack(app, 'safewalk-app-heatmap-stack', { env });
+const liveLocationStack = new LiveLocationStack(app, 'safewalk-app-live-location-stack', {
   env,
-  devPrefix,
   appUsersTable: userStack.appUsersTable,
 });
-const tipsStack = new TipsStack(app, 'safewalk-app-tips-stack', {
+const tipsStack = new TipsStack(app, 'safewalk-app-tips-stack', { env });
+new ApiStack(app, 'safewalk-app-api-stack', {
   env,
-});
-new ApiStack(app, stackName('safewalk-app-api-stack'), {
-  env,
-  devPrefix,
   userPool: authStack.userPool,
   userPoolClient: authStack.userPoolClient,
   authHandler: authStack.authHandler,

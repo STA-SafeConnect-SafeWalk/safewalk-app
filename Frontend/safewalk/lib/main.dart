@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:safewalk/app.dart';
 import 'package:safewalk/services/api_service.dart';
 import 'package:safewalk/services/auth_service.dart';
+import 'package:safewalk/services/headphone_service.dart';
 import 'package:safewalk/services/push_notification_service.dart';
 import 'package:safewalk/viewmodels/home_viewmodel.dart';
 import 'package:safewalk/viewmodels/login_viewmodel.dart';
@@ -27,13 +28,18 @@ void main() {
   final authService = AuthService();
   final apiService = ApiService(authService: authService);
   final pushService = PushNotificationService(apiService: apiService);
+  final headphoneService = HeadphoneService();
 
   // Initialise Firebase (non-blocking – push won't work until configured).
   pushService.init();
 
+  // Start listening for headphone connection changes.
+  headphoneService.init();
+
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider<HeadphoneService>.value(value: headphoneService),
         ChangeNotifierProvider(
           create: (_) => LoginViewModel(
             apiService: apiService,
@@ -50,9 +56,12 @@ void main() {
           create: (_) => ContactsViewModel(apiService: apiService),
         ),
         ChangeNotifierProvider(
-          create: (_) => TipsViewModel(apiService: apiService),
+          create: (_) => TipsViewModel(
+            apiService: apiService,
+            headphoneService: headphoneService,
+          ),
         ),
-        ChangeNotifierProvider(create: (_) => SettingsViewModel()),
+        ChangeNotifierProvider(create: (_) => SettingsViewModel(apiService: apiService)),
       ],
       child: const SafeWalkApp(),
     ),

@@ -1,11 +1,17 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, DeleteCommand, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  CognitoIdentityProviderClient,
+  AdminUpdateUserAttributesCommand,
+  AdminDeleteUserCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import * as https from 'https';
 import * as http from 'http';
 
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const cognitoClient = new CognitoIdentityProviderClient({});
 
 interface ConnectWithCodeRequest {
   sharingCode: string;
@@ -202,6 +208,12 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     case 'GET /me':
       return handleGetMe(event, tableName);
 
+    case 'PATCH /me':
+      return handleUpdateMe(event, tableName);
+
+    case 'DELETE /me':
+      return handleDeleteMe(event, tableName);
+
     case 'POST /register':
       return handleRegister(event, tableName);
 
@@ -265,6 +277,168 @@ async function handleGetMe(
     });
   }
 }
+
+// Handler: PATCH /me  –  update the user's displayName
+async function handleUpdateMe(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const userPoolId = getEnv('COGNITO_USER_POOL_ID');
+  if (!userPoolId) return missingEnvResponse('COGNITO_USER_POOL_ID');
+
+  let body: { displayName?: unknown };
+  try {
+    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    body = JSON.parse(event.body) as { displayName?: unknown };
+  } catch {
+    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+  }
+
+  const { displayName } = body;
+  if (displayName === undefined) {
+    return jsonResponse(400, { error: 'displayName is required' });
+  }
+  if (typeof displayName !== 'string' || displayName.trim().length === 0) {
+    return jsonResponse(400, { error: 'displayName must be a non-empty string' });
+  }
+  const trimmedName = displayName.trim();
+
+  let email: string | undefined;
+  let safeWalkId: string | undefined;
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+    if (!result.Item) return jsonResponse(404, { error: 'User profile not found' });
+    email = result.Item.email as string | undefined;
+    safeWalkId = result.Item.safeWalkId as string | undefined;
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return jsonResponse(500, {
+      error: 'Failed to retrieve user profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  try {
+    await docClient.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: { safeWalkAppId: userId },
+        UpdateExpression: 'SET displayName = :displayName, updatedAt = :updatedAt',
+        ExpressionAttributeValues: {
+          ':displayName': trimmedName,
+          ':updatedAt': new Date().toISOString(),
+        },
+      }),
+    );
+  } catch (error) {
+    console.error('Error updating user profile in DynamoDB:', error);
+    return jsonResponse(500, {
+      error: 'Failed to update user profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  // Sync display name to Cognito (best-effort: DynamoDB is the source of truth)
+  if (email) {
+    try {
+      await cognitoClient.send(
+        new AdminUpdateUserAttributesCommand({
+          UserPoolId: userPoolId,
+          Username: email,
+          UserAttributes: [{ Name: 'name', Value: trimmedName }],
+        }),
+      );
+    } catch (error) {
+      console.error('Error updating Cognito name attribute (non-fatal):', error);
+    }
+  }
+
+  // Propagate the updated name to the SafeWalk platform (best-effort).
+  // This ensures contacts see the new display name when fetching the contacts list.
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  const apiKey = getEnv('API_KEY');
+  if (safeWalkId && platformBaseDomain && apiKey) {
+    try {
+      await sendRequest<{ success: boolean }>(
+        `${platformBaseDomain}/users/${encodeURIComponent(safeWalkId)}`,
+        'PATCH',
+        apiKey,
+        { name: trimmedName },
+      );
+      console.log('Platform user name updated for safeWalkId:', safeWalkId);
+    } catch (error) {
+      console.error('Error updating platform user name (non-fatal):', error);
+    }
+  }
+
+  console.log('User profile updated:', userId);
+  return jsonResponse(200, { message: 'Profile updated successfully', displayName: trimmedName });
+}
+async function handleDeleteMe(
+  event: APIGatewayProxyEventV2,
+  tableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const userPoolId = getEnv('COGNITO_USER_POOL_ID');
+  if (!userPoolId) return missingEnvResponse('COGNITO_USER_POOL_ID');
+
+  let email: string | undefined;
+  try {
+    const result = await docClient.send(
+      new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+    if (!result.Item) return jsonResponse(404, { error: 'User profile not found' });
+    email = result.Item.email as string | undefined;
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return jsonResponse(500, {
+      error: 'Failed to retrieve user profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  // Delete the app profile from DynamoDB
+  try {
+    await docClient.send(
+      new DeleteCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
+    );
+  } catch (error) {
+    console.error('Error deleting user profile from DynamoDB:', error);
+    return jsonResponse(500, {
+      error: 'Failed to delete user account',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  // Remove the Cognito user (best-effort: if this fails the profile is already gone)
+  if (email) {
+    try {
+      await cognitoClient.send(
+        new AdminDeleteUserCommand({
+          UserPoolId: userPoolId,
+          Username: email,
+        }),
+      );
+      console.log('Cognito user deleted:', userId);
+    } catch (error) {
+      console.error('Error deleting Cognito user (non-fatal, profile already removed):', error);
+    }
+  }
+
+  console.log('User account deleted:', userId);
+  return { statusCode: 204, headers: { 'Content-Type': 'application/json' }, body: '' };
+}
+
+// ---------------------------------------------------------------------------
+// Handler: GET /sharing-code
+// ---------------------------------------------------------------------------
 
 async function handleGetSharingCode(
   event: APIGatewayProxyEventV2,

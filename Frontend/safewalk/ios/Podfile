@@ -1,5 +1,5 @@
-# Minimum iOS version required by Firebase packages.
-platform :ios, '15.0'
+# Minimum iOS version required by headphones_detection (and Firebase packages).
+platform :ios, '16.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
