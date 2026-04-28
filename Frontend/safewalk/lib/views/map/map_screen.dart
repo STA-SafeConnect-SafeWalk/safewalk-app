@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
@@ -10,6 +12,54 @@ const _kMapBackground = Color(0xFFF5F8F8);
 const _kMapPrimary = Color(0xFF00666B);
 const _kMapPrimarySoft = Color(0x1A00666B);
 const _kMapCardBackground = Colors.white;
+const _kMarkerBorder = Color(0xFFAEEADB);
+
+class _LayerVisualStyle {
+  const _LayerVisualStyle({required this.icon, required this.color});
+
+  final IconData icon;
+  final Color color;
+}
+
+_LayerVisualStyle _layerVisualStyle(String layerKey) {
+  switch (layerKey) {
+    case 'STREET_LAMP':
+      return const _LayerVisualStyle(
+        icon: Icons.light_mode_rounded,
+        color: Color(0xFFE0AA00),
+      );
+    case 'LIT_WAY':
+      return const _LayerVisualStyle(
+        icon: Icons.route_rounded,
+        color: Color(0xFF12A150),
+      );
+    case 'UNLIT_WAY':
+      return const _LayerVisualStyle(
+        icon: Icons.nights_stay_rounded,
+        color: Color(0xFFE11D48),
+      );
+    case 'POLICE_STATION':
+      return const _LayerVisualStyle(
+        icon: Icons.local_police_rounded,
+        color: Color(0xFF2563EB),
+      );
+    case 'HOSPITAL':
+      return const _LayerVisualStyle(
+        icon: Icons.local_hospital_rounded,
+        color: Color(0xFFDB2777),
+      );
+    case 'EMERGENCY_PHONE':
+      return const _LayerVisualStyle(
+        icon: Icons.phone_in_talk_rounded,
+        color: Color(0xFF7C3AED),
+      );
+    default:
+      return const _LayerVisualStyle(
+        icon: Icons.place_rounded,
+        color: Color(0xFF475569),
+      );
+  }
+}
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -24,11 +74,15 @@ class _MapScreenState extends State<MapScreen> {
   bool _awaitingReportPin = false;
 
   MapboxMap? _mapboxMap;
-  CircleAnnotationManager? _circleAnnotationManager;
-  CircleAnnotationManager? _heatmapAnnotationManager;
   PointAnnotationManager? _pointAnnotationManager;
+  CircleAnnotationManager? _reportPinAnnotationManager;
+  bool _cameraUpdatesEnabled = false;
+  bool _initialCameraSynced = false;
 
   List<HeatmapLayerEntry>? _lastRenderedEntries;
+  LatLng? _lastReportTapLocation;
+  LatLng? _lastSearchLocation;
+  final Map<String, Uint8List> _markerIconCache = <String, Uint8List>{};
 
   @override
   void initState() {
@@ -45,8 +99,21 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onViewModelChanged() {
     final vm = context.read<MapViewModel>();
+    unawaited(_ensureInitialCameraSync(vm));
     final entries = vm.visibleLayerEntries;
-    if (!_listEquals(entries, _lastRenderedEntries)) {
+    final reportChanged = !_sameLocation(
+      vm.reportTapLocation,
+      _lastReportTapLocation,
+    );
+    final searchChanged = !_sameLocation(
+      vm.selectedSearchLocation,
+      _lastSearchLocation,
+    );
+    if (reportChanged ||
+        searchChanged ||
+        !_listEquals(entries, _lastRenderedEntries)) {
+      _lastReportTapLocation = vm.reportTapLocation;
+      _lastSearchLocation = vm.selectedSearchLocation;
       _syncAnnotations(vm);
     }
   }
@@ -65,11 +132,18 @@ class _MapScreenState extends State<MapScreen> {
     return true;
   }
 
+  bool _sameLocation(LatLng? a, LatLng? b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    return a.latitude == b.latitude && a.longitude == b.longitude;
+  }
+
   @override
   void dispose() {
     context.read<MapViewModel>().removeListener(_onViewModelChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _markerIconCache.clear();
     super.dispose();
   }
 
@@ -88,11 +162,11 @@ class _MapScreenState extends State<MapScreen> {
           children: [
             Positioned.fill(child: _buildMap(vm)),
             Positioned(top: 8, left: 16, right: 16, child: _buildTopSearch(vm)),
-            Positioned(right: 16, bottom: 250, child: _buildMapControls(vm)),
+            Positioned(top: 94, right: 16, child: _buildMapControls(vm)),
             Positioned(
               left: 16,
               right: 16,
-              bottom: 88,
+              bottom: 16,
               child: _buildActiveLayerCard(vm),
             ),
           ],
@@ -131,6 +205,7 @@ class _MapScreenState extends State<MapScreen> {
         zoom: vm.zoom,
       ),
       onMapCreated: _onMapCreated,
+      onCameraChangeListener: _onCameraChanged,
       onTapListener: _onMapTap,
       onMapIdleListener: _onMapIdle,
     );
@@ -138,12 +213,10 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(MapboxMap map) async {
     _mapboxMap = map;
-    _heatmapAnnotationManager = await map.annotations
-        .createCircleAnnotationManager();
-    _circleAnnotationManager = await map.annotations
-        .createCircleAnnotationManager();
     _pointAnnotationManager = await map.annotations
         .createPointAnnotationManager();
+    _reportPinAnnotationManager = await map.annotations
+        .createCircleAnnotationManager();
 
     await map.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
     await map.compass.updateSettings(CompassSettings(enabled: false));
@@ -160,11 +233,56 @@ class _MapScreenState extends State<MapScreen> {
       ),
     );
 
+    if (!mounted) return;
     final vm = context.read<MapViewModel>();
-    _flyTo(vm.mapCenter, vm.zoom);
+    unawaited(_ensureInitialCameraSync(vm));
+    unawaited(_syncAnnotations(vm));
+  }
+
+  Future<void> _ensureInitialCameraSync(MapViewModel vm) async {
+    final map = _mapboxMap;
+    if (map == null || _initialCameraSynced || !vm.isInitialized) {
+      return;
+    }
+
+    _initialCameraSynced = true;
+
+    try {
+      await map.setCamera(
+        CameraOptions(
+          center: Point(
+            coordinates: Position(
+              vm.mapCenter.longitude,
+              vm.mapCenter.latitude,
+            ),
+          ),
+          zoom: vm.zoom,
+        ),
+      );
+
+      _cameraUpdatesEnabled = true;
+
+      final camera = await map.getCameraState();
+      _applyCameraStateToViewModel(camera, includeViewportBounds: true);
+    } catch (_) {
+      _cameraUpdatesEnabled = true;
+    }
+  }
+
+  void _onCameraChanged(CameraChangedEventData event) {
+    if (!_cameraUpdatesEnabled) return;
+
+    _applyCameraStateToViewModel(
+      event.cameraState,
+      includeViewportBounds: false,
+    );
   }
 
   void _onMapTap(MapContentGestureContext gestureContext) {
+    if (!_awaitingReportPin) {
+      return;
+    }
+
     final point = gestureContext.point;
     final coords = point.coordinates;
     final vm = context.read<MapViewModel>();
@@ -181,50 +299,88 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapIdle(MapIdleEventData event) {
     final map = _mapboxMap;
-    if (map == null) return;
+    if (!_cameraUpdatesEnabled || map == null) return;
 
-    map.getCameraState().then((camera) {
+    Future<void>(() async {
+      final camera = await map.getCameraState();
+      _applyCameraStateToViewModel(camera, includeViewportBounds: true);
+    });
+  }
+
+  void _applyCameraStateToViewModel(
+    CameraState camera, {
+    required bool includeViewportBounds,
+  }) {
+    final map = _mapboxMap;
+    if (!mounted) return;
+
+    Future<void>(() async {
+      MapViewportBounds? viewportBounds;
+
+      if (includeViewportBounds && map != null) {
+        try {
+          final bounds = await map.coordinateBoundsForCamera(
+            CameraOptions(
+              center: camera.center,
+              padding: camera.padding,
+              zoom: camera.zoom,
+              bearing: camera.bearing,
+              pitch: camera.pitch,
+            ),
+          );
+
+          viewportBounds = MapViewportBounds(
+            north: bounds.northeast.coordinates.lat.toDouble(),
+            south: bounds.southwest.coordinates.lat.toDouble(),
+            east: bounds.northeast.coordinates.lng.toDouble(),
+            west: bounds.southwest.coordinates.lng.toDouble(),
+          );
+        } catch (_) {}
+      }
+
+      if (!mounted) return;
+
       final center = camera.center.coordinates;
       final vm = context.read<MapViewModel>();
       vm.onCameraMoved(
         LatLng(center.lat.toDouble(), center.lng.toDouble()),
         camera.zoom,
-        scheduleReload: true,
+        viewportBounds: viewportBounds,
       );
     });
   }
 
   Future<void> _syncAnnotations(MapViewModel vm) async {
-    final circleMgr = _circleAnnotationManager;
-    final heatmapMgr = _heatmapAnnotationManager;
     final pointMgr = _pointAnnotationManager;
-    if (circleMgr == null || pointMgr == null || heatmapMgr == null) return;
+    final reportMgr = _reportPinAnnotationManager;
+    if (pointMgr == null || reportMgr == null) return;
 
-    await circleMgr.deleteAll();
     await pointMgr.deleteAll();
-    await heatmapMgr.deleteAll();
+    await reportMgr.deleteAll();
 
     final entries = vm.visibleLayerEntries;
     _lastRenderedEntries = entries;
 
     for (final entry in entries) {
-      await heatmapMgr.create(
-        CircleAnnotationOptions(
-          geometry: Point(
-            coordinates: Position(entry.lng, entry.lat),
-          ),
-          circleRadius: _heatmapRadius(entry.count),
-          circleColor: _heatmapColor(entry.layerKey).toARGB32(),
-          circleOpacity: 0.55,
-          circleStrokeColor: _heatmapColor(entry.layerKey).toARGB32(),
-          circleStrokeWidth: 1,
-          circleStrokeOpacity: 0.8,
+      final style = _layerVisualStyle(entry.layerKey);
+      final markerIcon = await _markerIconForVisual(
+        cacheKey: 'layer:${entry.layerKey}',
+        icon: style.icon,
+        iconColor: style.color,
+      );
+      await pointMgr.create(
+        PointAnnotationOptions(
+          geometry: Point(coordinates: Position(entry.lng, entry.lat)),
+          image: markerIcon,
+          iconAnchor: IconAnchor.BOTTOM,
+          iconSize: 1,
+          symbolSortKey: entry.count.toDouble(),
         ),
       );
     }
 
     if (vm.reportTapLocation != null) {
-      await circleMgr.create(
+      await reportMgr.create(
         CircleAnnotationOptions(
           geometry: Point(
             coordinates: Position(
@@ -232,56 +388,136 @@ class _MapScreenState extends State<MapScreen> {
               vm.reportTapLocation!.latitude,
             ),
           ),
-          circleRadius: 12,
+          circleRadius: 10,
           circleColor: const Color(0xFFEF4444).toARGB32(),
           circleStrokeColor: Colors.white.toARGB32(),
-          circleStrokeWidth: 3,
+          circleStrokeWidth: 2,
         ),
       );
     }
 
     if (vm.selectedSearchLocation != null) {
-      await circleMgr.create(
-        CircleAnnotationOptions(
+      final searchMarkerIcon = await _markerIconForVisual(
+        cacheKey: 'search-pin',
+        icon: Icons.place_rounded,
+        iconColor: const Color(0xFF2563EB),
+      );
+      await pointMgr.create(
+        PointAnnotationOptions(
           geometry: Point(
             coordinates: Position(
               vm.selectedSearchLocation!.longitude,
               vm.selectedSearchLocation!.latitude,
             ),
           ),
-          circleRadius: 12,
-          circleColor: const Color(0xFF8B5CF6).toARGB32(),
-          circleStrokeColor: Colors.white.toARGB32(),
-          circleStrokeWidth: 3,
+          image: searchMarkerIcon,
+          iconAnchor: IconAnchor.BOTTOM,
+          iconSize: 1,
+          symbolSortKey: 999,
         ),
       );
     }
   }
 
-  double _heatmapRadius(int count) {
-    if (count <= 5) return 8;
-    if (count <= 20) return 12;
-    if (count <= 100) return 16;
-    return 20;
+  Future<Uint8List> _markerIconForVisual({
+    required String cacheKey,
+    required IconData icon,
+    required Color iconColor,
+  }) async {
+    final cached = _markerIconCache[cacheKey];
+    if (cached != null) {
+      return cached;
+    }
+
+    final markerBytes = await _buildMarkerIcon(
+      icon: icon,
+      iconColor: iconColor,
+    );
+    _markerIconCache[cacheKey] = markerBytes;
+    return markerBytes;
   }
 
-  Color _heatmapColor(String layerKey) {
-    switch (layerKey) {
-      case 'STREET_LAMP':
-        return const Color(0xFFFBBF24);
-      case 'LIT_WAY':
-        return const Color(0xFF34D399);
-      case 'UNLIT_WAY':
-        return const Color(0xFFEF4444);
-      case 'POLICE_STATION':
-        return const Color(0xFF3B82F6);
-      case 'HOSPITAL':
-        return const Color(0xFFF472B6);
-      case 'EMERGENCY_PHONE':
-        return const Color(0xFFA78BFA);
-      default:
-        return const Color(0xFF6B7280);
+  Future<Uint8List> _buildMarkerIcon({
+    required IconData icon,
+    required Color iconColor,
+  }) async {
+    const markerWidth = 88.0;
+    const markerHeight = 98.0;
+    const bubbleTop = 8.0;
+    const bubbleHeight = 64.0;
+    const pointerTop = bubbleTop + bubbleHeight - 2;
+    const pointerBottom = 88.0;
+    const pointerHalfWidth = 12.0;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(
+      recorder,
+      Rect.fromLTWH(0, 0, markerWidth, markerHeight),
+    );
+
+    final bubbleRect = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(8, bubbleTop, markerWidth - 16, bubbleHeight),
+      const Radius.circular(24),
+    );
+    final pointerPath = Path()
+      ..moveTo(markerWidth / 2 - pointerHalfWidth, pointerTop)
+      ..lineTo(markerWidth / 2 + pointerHalfWidth, pointerTop)
+      ..lineTo(markerWidth / 2, pointerBottom)
+      ..close();
+
+    final shadowPaint = Paint()
+      ..color = const Color(0x33000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3)
+      ..isAntiAlias = true;
+    final fillPaint = Paint()
+      ..color = Colors.white
+      ..isAntiAlias = true;
+    final strokePaint = Paint()
+      ..color = _kMarkerBorder
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..isAntiAlias = true;
+
+    canvas.drawRRect(bubbleRect.shift(const Offset(0, 1)), shadowPaint);
+    canvas.drawPath(pointerPath.shift(const Offset(0, 1)), shadowPaint);
+
+    canvas.drawRRect(bubbleRect, fillPaint);
+    canvas.drawPath(pointerPath, fillPaint);
+
+    canvas.drawRRect(bubbleRect, strokePaint);
+    canvas.drawPath(pointerPath, strokePaint);
+
+    final iconPainter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          color: iconColor,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          fontSize: 34,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    iconPainter.paint(
+      canvas,
+      Offset(
+        (markerWidth - iconPainter.width) / 2,
+        bubbleTop + (bubbleHeight - iconPainter.height) / 2,
+      ),
+    );
+
+    final image = await recorder.endRecording().toImage(
+      markerWidth.toInt(),
+      markerHeight.toInt(),
+    );
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) {
+      throw StateError('Marker-Icon konnte nicht erstellt werden.');
     }
+
+    return byteData.buffer.asUint8List();
   }
 
   Widget _buildTopSearch(MapViewModel vm) {
@@ -386,12 +622,12 @@ class _MapScreenState extends State<MapScreen> {
     return Column(
       children: [
         _CircleControlButton(icon: Icons.add, onPressed: () => _adjustZoom(1)),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _CircleControlButton(
           icon: Icons.remove,
           onPressed: () => _adjustZoom(-1),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _CircleControlButton(
           icon: Icons.my_location,
           onPressed: () async {
@@ -400,7 +636,7 @@ class _MapScreenState extends State<MapScreen> {
             _flyTo(target, vm.zoom);
           },
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _SquareControlButton(
           icon: Icons.add_comment_outlined,
           onPressed: () => _openReportSheet(),
@@ -410,70 +646,92 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildActiveLayerCard(MapViewModel vm) {
-    return GestureDetector(
-      onTap: _openLayerSheet,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x1F000000),
-              blurRadius: 16,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-        child: Row(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: _kMapPrimarySoft,
-              ),
-              child: const Icon(Icons.layers, color: _kMapPrimary, size: 28),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Aktuelle Ansicht: ${vm.activeViewTitle}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF172338),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1F000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _openLayerSheet,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _kMapPrimarySoft,
+                      ),
+                      child: const Icon(
+                        Icons.layers,
+                        color: _kMapPrimary,
+                        size: 28,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    vm.activeViewSubtitle,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Color(0xFF64748B),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Aktuelle Ansicht: ${vm.activeViewTitle}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF172338),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            vm.activeViewSubtitle,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const Icon(
+                      Icons.chevron_right,
+                      color: Color(0xFFB4BCC8),
+                      size: 28,
+                    ),
+                  ],
+                ),
               ),
             ),
-            if (vm.isLoadingHeatmap)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFFB4BCC8),
-                size: 28,
-              ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Daten aktualisieren',
+            onPressed: vm.isLoadingHeatmap
+                ? null
+                : () => vm.loadHeatmap(force: true),
+            icon: vm.isLoadingHeatmap
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            color: _kMapPrimary,
+          ),
+        ],
       ),
     );
   }
@@ -489,7 +747,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _openReportSheet() async {
     final vm = context.read<MapViewModel>();
-    final needsPin = await showModalBottomSheet<bool>(
+    final result = await showModalBottomSheet<_ReportSheetResult>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -498,7 +756,16 @@ class _MapScreenState extends State<MapScreen> {
         initialUseCurrentLocation: vm.useCurrentLocationForReport,
       ),
     );
-    _awaitingReportPin = needsPin == true;
+    if (!mounted) return;
+
+    if (result == _ReportSheetResult.needsPin) {
+      _awaitingReportPin = true;
+      return;
+    }
+
+    _awaitingReportPin = false;
+    vm.clearReportTapLocation();
+    unawaited(_syncAnnotations(vm));
   }
 
   void _syncSearchField(MapViewModel vm) {
@@ -581,9 +848,9 @@ class _CircleControlButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onPressed,
         child: SizedBox(
-          width: 58,
-          height: 58,
-          child: Icon(icon, size: 34, color: _kMapPrimary),
+          width: 48,
+          height: 48,
+          child: Icon(icon, size: 22, color: _kMapPrimary),
         ),
       ),
     );
@@ -606,9 +873,9 @@ class _SquareControlButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         onTap: onPressed,
         child: SizedBox(
-          width: 74,
-          height: 74,
-          child: Icon(icon, size: 34, color: _kMapPrimary),
+          width: 48,
+          height: 48,
+          child: Icon(icon, size: 22, color: _kMapPrimary),
         ),
       ),
     );
@@ -647,9 +914,17 @@ class _LayerSelectionSheet extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: vm.publicDataLayers
-                .map(
-                  (layer) => FilterChip(
-                    label: Text('${layer.label} (${totals[layer.key] ?? 0})'),
+                .map((layer) {
+                  final style = _layerVisualStyle(layer.key);
+                  return FilterChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(style.icon, size: 18, color: style.color),
+                        const SizedBox(width: 6),
+                        Text('${layer.label} (${totals[layer.key] ?? 0})'),
+                      ],
+                    ),
                     selected: layer.isSelected,
                     selectedColor: _kMapPrimarySoft,
                     checkmarkColor: _kMapPrimary,
@@ -659,8 +934,8 @@ class _LayerSelectionSheet extends StatelessWidget {
                           : const Color(0xFFE2E8F0),
                     ),
                     onSelected: (_) => vm.toggleLayer(layer.key),
-                  ),
-                )
+                  );
+                })
                 .toList(growable: false),
           ),
           const SizedBox(height: 14),
@@ -672,7 +947,9 @@ class _LayerSelectionSheet extends StatelessWidget {
                   : () => vm.loadHeatmap(force: true),
               icon: const Icon(Icons.refresh),
               label: Text(
-                vm.isLoadingHeatmap ? 'Aktualisiere...' : 'Jetzt aktualisieren',
+                vm.isLoadingHeatmap
+                    ? 'Aktualisieren...'
+                    : 'Daten aktualisieren',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _kMapPrimary,
@@ -689,6 +966,8 @@ class _LayerSelectionSheet extends StatelessWidget {
     );
   }
 }
+
+enum _ReportSheetResult { needsPin, submitted }
 
 class _ReportSheet extends StatefulWidget {
   const _ReportSheet({
@@ -771,25 +1050,51 @@ class _ReportSheetState extends State<_ReportSheet> {
                   vm.setUseCurrentLocationForReport(true);
                 },
               ),
-              ChoiceChip(
-                label: const Text('Karten-Pin'),
-                selected: !_useCurrentLocation,
-                onSelected: (_) {
-                  setState(() => _useCurrentLocation = false);
-                  vm.setUseCurrentLocationForReport(false);
-                  if (vm.reportTapLocation == null) {
-                    Navigator.of(context).pop(true);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Tippe auf die Karte, um einen Meldepunkt zu setzen.',
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ChoiceChip(
+                    label: const Text('Karten-Pin'),
+                    selected: !_useCurrentLocation,
+                    onSelected: (_) {
+                      setState(() => _useCurrentLocation = false);
+                      vm.setUseCurrentLocationForReport(false);
+                      if (vm.reportTapLocation == null) {
+                        Navigator.of(context).pop(_ReportSheetResult.needsPin);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Tippe auf die Karte, um einen Meldepunkt zu setzen.',
+                            ),
+                            backgroundColor: _kMapPrimary,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Position aendern',
+                    icon: const Icon(Icons.edit_location_alt_outlined),
+                    color: _kMapPrimary,
+                    onPressed: () {
+                      setState(() => _useCurrentLocation = false);
+                      vm.setUseCurrentLocationForReport(false);
+                      vm.clearReportTapLocation();
+                      Navigator.of(context).pop(_ReportSheetResult.needsPin);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Tippe auf die Karte, um einen neuen Meldepunkt zu setzen.',
+                          ),
+                          backgroundColor: _kMapPrimary,
+                          duration: Duration(seconds: 3),
                         ),
-                        backgroundColor: _kMapPrimary,
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                },
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -847,8 +1152,10 @@ class _ReportSheetState extends State<_ReportSheet> {
                         categoryKey: _selectedCategory,
                         description: _descriptionController.text,
                       );
-                      if (!mounted) return;
-                      if (ok) Navigator.of(context).pop();
+                      if (!context.mounted) return;
+                      if (ok) {
+                        Navigator.of(context).pop(_ReportSheetResult.submitted);
+                      }
                     },
               icon: vm.isSubmittingReport
                   ? const SizedBox(

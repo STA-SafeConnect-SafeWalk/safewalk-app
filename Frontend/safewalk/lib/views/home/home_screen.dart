@@ -50,8 +50,8 @@ class _HomeView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusTitle = vm.isSharingLocation
-        ? 'Status: Standort wird geteilt'
-        : 'Status: Standort wird nicht geteilt';
+        ? 'Standort wird geteilt'
+        : 'Standort wird nicht geteilt';
 
     final footerText =
         vm.locationError ??

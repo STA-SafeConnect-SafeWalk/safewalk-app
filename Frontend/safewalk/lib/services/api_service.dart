@@ -12,7 +12,9 @@
 //     refresh using the stored refreshToken.
 
 import 'dart:async';
+import 'dart:developer' as developer;
 
+import 'package:http/http.dart' as http;
 import 'package:safewalk/core/constants/api_constants.dart';
 import 'package:safewalk/core/network/api_client.dart';
 import 'package:safewalk/core/network/api_result.dart';
@@ -23,6 +25,7 @@ class ApiService {
   late final AuthService _authService;
 
   Completer<bool>? _refreshCompleter;
+  http.Client? _heatmapClient;
 
   ApiService({ApiClient? client, AuthService? authService}) {
     _client =
@@ -344,15 +347,60 @@ class ApiService {
     required double lat,
     required double lng,
     double? radiusKm,
+    bool cancelPrevious = false,
   }) async {
     final query = <String, dynamic>{'lat': lat, 'lng': lng};
     if (radiusKm != null) {
       query['radiusKm'] = radiusKm;
     }
 
-    return _authenticatedRequest(
-      () => _client.get(ApiConstants.heatmap, queryParameters: query),
-    );
+    assert(() {
+      developer.log(
+        'HEATMAP GET query: ${Uri(path: ApiConstants.heatmap, queryParameters: query.map((key, value) => MapEntry(key, value.toString())))}',
+        name: 'SafeWalk.ApiService',
+      );
+      return true;
+    }());
+
+    if (cancelPrevious) {
+      assert(() {
+        developer.log(
+          'HEATMAP GET cancelPrevious=true, closing previous in-flight client if present.',
+          name: 'SafeWalk.ApiService',
+        );
+        return true;
+      }());
+      _heatmapClient?.close();
+      _heatmapClient = null;
+    }
+
+    final client = http.Client();
+    _heatmapClient = client;
+
+    try {
+      final result = await _authenticatedRequest(
+        () => _client.get(
+          ApiConstants.heatmap,
+          queryParameters: query,
+          client: client,
+        ),
+      );
+
+      assert(() {
+        developer.log(
+          'HEATMAP GET result: status=${result.statusCode}, success=${result.isSuccess}',
+          name: 'SafeWalk.ApiService',
+        );
+        return true;
+      }());
+
+      return result;
+    } finally {
+      client.close();
+      if (identical(_heatmapClient, client)) {
+        _heatmapClient = null;
+      }
+    }
   }
 
   /// Submits a user safety report for the map heatmap.

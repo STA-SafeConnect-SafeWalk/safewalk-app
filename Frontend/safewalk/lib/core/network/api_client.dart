@@ -28,7 +28,7 @@ class ApiClient {
 
   ApiClient({
     required this.baseUrl,
-    this.timeout = const Duration(seconds: 30),
+    this.timeout = const Duration(seconds: 15),
     this.authToken,
   });
 
@@ -44,10 +44,14 @@ class ApiClient {
     String endpoint, {
     Map<String, String>? headers,
     Map<String, dynamic>? queryParameters,
+    http.Client? client,
   }) async {
+    final effectiveClient = client ?? http.Client();
+    final ownsClient = client == null;
+
     try {
       final uri = _buildUri(endpoint, queryParameters);
-      final response = await http
+      final response = await effectiveClient
           .get(uri, headers: _buildHeaders(headers))
           .timeout(timeout);
       return _handleResponse(response);
@@ -56,6 +60,10 @@ class ApiClient {
         statusCode: 0,
         message: 'GET request failed: ${e.toString()}',
       );
+    } finally {
+      if (ownsClient) {
+        effectiveClient.close();
+      }
     }
   }
 

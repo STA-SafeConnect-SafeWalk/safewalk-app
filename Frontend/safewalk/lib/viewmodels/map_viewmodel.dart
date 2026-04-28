@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,6 +11,27 @@ class LatLng {
   const LatLng(this.latitude, this.longitude);
   final double latitude;
   final double longitude;
+}
+
+class MapViewportBounds {
+  const MapViewportBounds({
+    required this.north,
+    required this.south,
+    required this.east,
+    required this.west,
+  });
+
+  final double north;
+  final double south;
+  final double east;
+  final double west;
+
+  List<LatLng> get corners => [
+    LatLng(north, west),
+    LatLng(north, east),
+    LatLng(south, west),
+    LatLng(south, east),
+  ];
 }
 
 class MapViewModel extends ChangeNotifier {
@@ -24,7 +46,6 @@ class MapViewModel extends ChangeNotifier {
 
   static const _defaultCenter = LatLng(48.137154, 11.576124);
   static const _defaultZoom = 13.0;
-  static const _reloadDebounce = Duration(milliseconds: 700);
   static const _searchDebounce = Duration(milliseconds: 350);
 
   static const _defaultSelectedLayerKeys = <String>{'STREET_LAMP', 'LIT_WAY'};
@@ -120,10 +141,13 @@ class MapViewModel extends ChangeNotifier {
   LatLng _mapCenter = _defaultCenter;
   double _zoom = _defaultZoom;
   double _radiusKm = 2;
+  double _maxRadiusKm = 10;
 
   LatLng? _userLocation;
   LatLng? _selectedSearchLocation;
   LatLng? _reportTapLocation;
+
+  MapViewportBounds? _lastViewportBounds;
 
   String _searchQuery = '';
   List<MapPlaceSuggestion> _searchSuggestions = const [];
@@ -136,7 +160,8 @@ class MapViewModel extends ChangeNotifier {
   bool _useCurrentLocationForReport = true;
 
   Timer? _searchTimer;
-  Timer? _reloadTimer;
+
+  int _activeHeatmapRequestId = 0;
 
   bool get isInitialized => _initialized;
   bool get isInitializing => _isInitializing;
@@ -197,7 +222,7 @@ class MapViewModel extends ChangeNotifier {
       0,
       (sum, item) => sum + item.count,
     );
-    if (total == 0) return 'Keine Einträge im aktuellen Ausschnitt';
+    if (total == 0) return 'Keine Einträge im aktuellen Ausschnitt verfügbar';
     return '$total Einträge im aktuellen Ausschnitt';
   }
 
@@ -264,33 +289,59 @@ class MapViewModel extends ChangeNotifier {
 
     await _loadMetadata();
     await _loadCurrentLocation();
-    await loadHeatmap(force: true);
 
     _isInitializing = false;
     notifyListeners();
   }
 
-  Future<void> loadHeatmap({LatLng? center, bool force = false}) async {
+  Future<void> loadHeatmap({
+    LatLng? center,
+    MapViewportBounds? viewportBounds,
+    bool force = false,
+  }) async {
     if (center != null) {
       _mapCenter = center;
     }
 
-    if (_isLoadingHeatmap && !force) return;
+    if (viewportBounds != null) {
+      _lastViewportBounds = viewportBounds;
+    }
+
+    final requestCenter = _mapCenter;
+    final effectiveViewportBounds = viewportBounds ?? _lastViewportBounds;
+
+    final requestRadiusKm = _requiredViewportRadiusKm(
+      _zoom,
+      center: requestCenter,
+      viewportBounds: effectiveViewportBounds,
+    );
+
+    if (requestRadiusKm > _maxRadiusKm) {
+      _errorMessage =
+          'Kartenausschnitt zu gross. Bitte zoomen, um Daten zu laden.';
+      notifyListeners();
+      return;
+    }
+
+    final requestId = ++_activeHeatmapRequestId;
 
     _isLoadingHeatmap = true;
     notifyListeners();
 
     try {
       final result = await _apiService.getHeatmap(
-        lat: _mapCenter.latitude,
-        lng: _mapCenter.longitude,
-        radiusKm: _radiusKm,
+        lat: requestCenter.latitude,
+        lng: requestCenter.longitude,
+        radiusKm: requestRadiusKm,
+        cancelPrevious: true,
       );
+
+      if (requestId != _activeHeatmapRequestId) {
+        return;
+      }
 
       if (!result.isSuccess || result.data is! Map<String, dynamic>) {
         _errorMessage = _extractError(result.data, result.message);
-        _isLoadingHeatmap = false;
-        notifyListeners();
         return;
       }
 
@@ -298,8 +349,6 @@ class MapViewModel extends ChangeNotifier {
       final data = payload['data'];
       if (data is! Map<String, dynamic>) {
         _cells = const [];
-        _isLoadingHeatmap = false;
-        notifyListeners();
         return;
       }
 
@@ -316,32 +365,77 @@ class MapViewModel extends ChangeNotifier {
         _cells = const [];
       }
 
-      final radiusValue = _toDouble(data['radiusKm']);
-      if (radiusValue != null && radiusValue > 0) {
-        _radiusKm = radiusValue;
+      final serverRadius = _toDouble(data['radiusKm']);
+      final effectiveRadius = serverRadius ?? requestRadiusKm;
+      if (effectiveRadius > _maxRadiusKm) {
+        _errorMessage =
+            'Kartenausschnitt zu gross. Bitte zoomen, um Daten zu laden.';
       }
     } catch (e) {
+      if (requestId != _activeHeatmapRequestId) {
+        return;
+      }
       _errorMessage = 'Heatmap-Daten konnten nicht geladen werden: $e';
+    } finally {
+      if (requestId == _activeHeatmapRequestId) {
+        _isLoadingHeatmap = false;
+        notifyListeners();
+      }
     }
-
-    _isLoadingHeatmap = false;
-    notifyListeners();
   }
 
   void onCameraMoved(
     LatLng center,
     double zoom, {
-    bool scheduleReload = false,
+    MapViewportBounds? viewportBounds,
   }) {
     _mapCenter = center;
     _zoom = zoom;
-
-    if (scheduleReload) {
-      _reloadTimer?.cancel();
-      _reloadTimer = Timer(_reloadDebounce, () {
-        unawaited(loadHeatmap());
-      });
+    if (viewportBounds != null) {
+      _lastViewportBounds = viewportBounds;
     }
+  }
+
+  double _requiredViewportRadiusKm(
+    double zoom, {
+    required LatLng center,
+    MapViewportBounds? viewportBounds,
+  }) {
+    if (viewportBounds != null) {
+      var maxCornerDistanceKm = 0.0;
+      for (final corner in viewportBounds.corners) {
+        final distance = _haversineKm(center, corner);
+        if (distance > maxCornerDistanceKm) {
+          maxCornerDistanceKm = distance;
+        }
+      }
+
+      if (maxCornerDistanceKm > 0) {
+        return maxCornerDistanceKm;
+      }
+    }
+
+    const earthCircumKm = 40075.0;
+    final kmPerPx = earthCircumKm / (256 * (1 << zoom.floor()));
+    const fallbackScreenPx = 420.0;
+    final zoomBasedFallback = kmPerPx * fallbackScreenPx / 2;
+    final configuredFallback = _radiusKm > 0 ? _radiusKm : zoomBasedFallback;
+    return configuredFallback;
+  }
+
+  static double _haversineKm(LatLng a, LatLng b) {
+    const r = 6371.0;
+    final dLat = (b.latitude - a.latitude) * math.pi / 180;
+    final dLng = (b.longitude - a.longitude) * math.pi / 180;
+    final aLat = a.latitude * math.pi / 180;
+    final bLat = b.latitude * math.pi / 180;
+    final h =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(aLat) *
+            math.cos(bLat) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return 2 * r * math.atan2(math.sqrt(h), math.sqrt(1 - h));
   }
 
   void setSearchQuery(String value) {
@@ -391,8 +485,6 @@ class MapViewModel extends ChangeNotifier {
     _mapCenter = _selectedSearchLocation!;
     _zoom = 15.5;
     notifyListeners();
-
-    unawaited(loadHeatmap(center: _selectedSearchLocation, force: true));
   }
 
   Future<LatLng?> recenterToUser() async {
@@ -407,8 +499,6 @@ class MapViewModel extends ChangeNotifier {
     _mapCenter = _userLocation!;
     if (_zoom < 15) _zoom = 15;
     notifyListeners();
-
-    await loadHeatmap(center: _mapCenter, force: true);
     return _userLocation;
   }
 
@@ -477,13 +567,11 @@ class MapViewModel extends ChangeNotifier {
       }
 
       _selectedReportCategoryKey = selectedCategory;
-      _successMessage = 'Meldung wurde erfolgreich uebermittelt.';
+      _successMessage = 'Meldung wurde erfolgreich übermittelt.';
 
       if (!_useCurrentLocationForReport) {
         _reportTapLocation = null;
       }
-
-      await loadHeatmap(force: true);
       _isSubmittingReport = false;
       notifyListeners();
       return true;
@@ -545,6 +633,14 @@ class MapViewModel extends ChangeNotifier {
             final radiusValue = _toDouble(defaults['radiusKm']);
             if (radiusValue != null && radiusValue > 0) {
               _radiusKm = radiusValue;
+            }
+
+            final maxRadiusValue = _toDouble(defaults['maxRadiusKm']);
+            if (maxRadiusValue != null && maxRadiusValue > 0) {
+              _maxRadiusKm = maxRadiusValue;
+              if (_radiusKm > _maxRadiusKm) {
+                _radiusKm = _maxRadiusKm;
+              }
             }
           }
         }
@@ -670,7 +766,6 @@ class MapViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _searchTimer?.cancel();
-    _reloadTimer?.cancel();
     super.dispose();
   }
 }

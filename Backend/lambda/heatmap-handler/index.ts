@@ -28,7 +28,6 @@ const REPORT_CATEGORIES = [
   'UNSAFE_AREA',
   'WELL_LIT',
   'POORLY_LIT',
-  'SAFE_AREA',
   'HIGH_FOOT_TRAFFIC',
   'LOW_FOOT_TRAFFIC',
   'CRIME_INCIDENT',
@@ -38,7 +37,6 @@ type ReportCategory = (typeof REPORT_CATEGORIES)[number];
 
 // Positive = safer, negative = more dangerous
 const REPORT_CATEGORY_WEIGHTS: Record<ReportCategory, number> = {
-  SAFE_AREA: 2,
   WELL_LIT: 1,
   HIGH_FOOT_TRAFFIC: 1,
   POORLY_LIT: -1,
@@ -48,13 +46,12 @@ const REPORT_CATEGORY_WEIGHTS: Record<ReportCategory, number> = {
 };
 
 const REPORT_CATEGORY_LABELS: Record<ReportCategory, string> = {
-  SAFE_AREA: 'Sicherer Bereich',
   WELL_LIT: 'Gut beleuchtet',
   HIGH_FOOT_TRAFFIC: 'Hohe Personenfrequenz',
   POORLY_LIT: 'Schlecht beleuchtet',
   LOW_FOOT_TRAFFIC: 'Geringe Personenfrequenz',
   UNSAFE_AREA: 'Unsicherer Bereich',
-  CRIME_INCIDENT: 'Kriminalitaetsvorfall',
+  CRIME_INCIDENT: 'Kriminalitätsvorfall',
 };
 
 type PublicDataType =
@@ -79,7 +76,7 @@ const PUBLIC_DATA_LABELS: Record<PublicDataType, string> = {
   LIT_WAY: 'Beleuchtete Wege',
   UNLIT_WAY: 'Unbeleuchtete Wege',
   POLICE_STATION: 'Polizeistationen',
-  HOSPITAL: 'Krankenhaeuser',
+  HOSPITAL: 'Krankenhäuser',
   EMERGENCY_PHONE: 'Notruftelefone',
 };
 
