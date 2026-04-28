@@ -155,7 +155,6 @@ class MapViewModel extends ChangeNotifier {
   bool _useCurrentLocationForReport = true;
 
   List<CommunityReportItem> _communityReports = const [];
-  bool _isLoadingCommunityReports = false;
 
   LatLng? _savedReportPinLocation;
 
@@ -193,7 +192,6 @@ class MapViewModel extends ChangeNotifier {
   String? get selectedReportCategoryKey => _selectedReportCategoryKey;
 
   List<CommunityReportItem> get communityReports => _communityReports;
-  bool get isLoadingCommunityReports => _isLoadingCommunityReports;
   int get renderGeneration => _renderGeneration;
 
   bool get isMapboxConfigured => _mapboxPlacesService.isConfigured;
@@ -370,6 +368,20 @@ class MapViewModel extends ChangeNotifier {
         _cells = const [];
       }
 
+      final rawReports = data['reports'];
+      if (rawReports is List) {
+        _communityReports = rawReports
+            .whereType<Map>()
+            .map(
+              (item) => CommunityReportItem.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .toList(growable: false);
+      } else {
+        _communityReports = const [];
+      }
+
       final serverRadius = _toDouble(data['radiusKm']);
       final effectiveRadius = serverRadius ?? requestRadiusKm;
       if (effectiveRadius > _maxRadiusKm) {
@@ -386,63 +398,6 @@ class MapViewModel extends ChangeNotifier {
         _isLoadingHeatmap = false;
         notifyListeners();
       }
-    }
-  }
-
-  Future<void> loadCommunityReports() async {
-    final requestCenter = _mapCenter;
-    final effectiveViewportBounds = _lastViewportBounds;
-
-    final requestRadiusKm = _requiredViewportRadiusKm(
-      _zoom,
-      center: requestCenter,
-      viewportBounds: effectiveViewportBounds,
-    );
-
-    if (requestRadiusKm > _maxRadiusKm) return;
-
-    _isLoadingCommunityReports = true;
-    notifyListeners();
-
-    try {
-      final result = await _apiService.getCommunityReports(
-        lat: requestCenter.latitude,
-        lng: requestCenter.longitude,
-        radiusKm: requestRadiusKm,
-      );
-
-      if (!result.isSuccess || result.data is! Map<String, dynamic>) {
-        _isLoadingCommunityReports = false;
-        notifyListeners();
-        return;
-      }
-
-      final payload = result.data as Map<String, dynamic>;
-      final data = payload['data'];
-      if (data is! Map<String, dynamic>) {
-        _communityReports = const [];
-        _isLoadingCommunityReports = false;
-        notifyListeners();
-        return;
-      }
-
-      final rawReports = data['reports'];
-      if (rawReports is List) {
-        _communityReports = rawReports
-            .whereType<Map>()
-            .map(
-              (item) =>
-                  CommunityReportItem.fromJson(Map<String, dynamic>.from(item)),
-            )
-            .toList(growable: false);
-      } else {
-        _communityReports = const [];
-      }
-    } catch (_) {
-      _communityReports = const [];
-    } finally {
-      _isLoadingCommunityReports = false;
-      notifyListeners();
     }
   }
 

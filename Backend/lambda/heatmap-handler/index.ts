@@ -20,8 +20,8 @@ const MAX_DESCRIPTION_LENGTH = 500;
 const MAX_RADIUS_KM = 10;
 const DEFAULT_RADIUS_KM = 2;
 const OVERPASS_MIRRORS = [
-  { hostname: 'overpass.kumi.systems', path: '/api/interpreter' },
   { hostname: 'overpass-api.de', path: '/api/interpreter' },
+  { hostname: 'lz4.overpass-api.de', path: '/api/interpreter' },
 ];
 
 const REPORT_CATEGORIES = [
@@ -283,8 +283,6 @@ async function handleAPIGatewayEvent(
       return handleSubmitReport(event, reportsTableName);
     case 'GET /heatmap/reports':
       return handleListOwnReports(event, reportsTableName);
-    case 'GET /heatmap/reports/area':
-      return handleListAreaReports(event, reportsTableName);
     case 'DELETE /heatmap/reports/{reportId}':
       return handleDeleteReport(event, reportsTableName);
     case 'GET /heatmap':
@@ -490,65 +488,6 @@ async function handleListOwnReports(
   }
 }
 
-// /heatmap/reports/area — List community reports in a bounding box
-
-async function handleListAreaReports(
-  event: APIGatewayProxyEventV2,
-  reportsTableName: string,
-): Promise<APIGatewayProxyResultV2> {
-  const userId = getAuthenticatedUserId(event);
-  if (!userId) return UNAUTHORIZED_RESPONSE;
-
-  const latStr = event.queryStringParameters?.lat;
-  const lngStr = event.queryStringParameters?.lng;
-  const radiusStr = event.queryStringParameters?.radiusKm;
-
-  if (!latStr || !lngStr) {
-    return jsonResponse(400, { error: 'lat and lng query parameters are required' });
-  }
-
-  const lat = parseFloat(latStr);
-  const lng = parseFloat(lngStr);
-
-  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-    return jsonResponse(400, {
-      error: 'Valid lat (-90..90) and lng (-180..180) are required',
-    });
-  }
-
-  let radiusKm = DEFAULT_RADIUS_KM;
-  if (radiusStr) {
-    radiusKm = parseFloat(radiusStr);
-    if (isNaN(radiusKm) || radiusKm <= 0 || radiusKm > MAX_RADIUS_KM) {
-      return jsonResponse(400, {
-        error: `radiusKm must be between 0 and ${MAX_RADIUS_KM}`,
-      });
-    }
-  }
-
-  const bbox = boundingBoxFromCenter(lat, lng, radiusKm);
-  const geohash5Cells = geohashesInBoundingBox(bbox.minLat, bbox.minLng, bbox.maxLat, bbox.maxLng, 5);
-
-  const allReports = await fetchAllReports(reportsTableName, geohash5Cells);
-
-  const reports = allReports
-    .filter((item) => {
-      const rLat = item.lat as number;
-      const rLng = item.lng as number;
-      return rLat >= bbox.minLat && rLat <= bbox.maxLat && rLng >= bbox.minLng && rLng <= bbox.maxLng;
-    })
-    .map((item) => ({
-      reportId: item.reportId,
-      category: item.category,
-      lat: item.lat,
-      lng: item.lng,
-      description: item.description ?? null,
-      createdAt: item.createdAt,
-    }));
-
-  return jsonResponse(200, { success: true, data: { reports } });
-}
-
 // /heatmap/reports/{reportId} — Delete own report
 
 async function handleDeleteReport(
@@ -707,10 +646,26 @@ async function handleQueryHeatmap(
     });
   }
 
+  const reports = reportsByCell
+    .filter((item) => {
+      const rLat = item.lat as number;
+      const rLng = item.lng as number;
+      return rLat >= bbox.minLat && rLat <= bbox.maxLat && rLng >= bbox.minLng && rLng <= bbox.maxLng;
+    })
+    .map((item) => ({
+      reportId: item.reportId,
+      category: item.category,
+      lat: item.lat,
+      lng: item.lng,
+      description: item.description ?? null,
+      createdAt: item.createdAt,
+    }));
+
   return jsonResponse(200, {
     success: true,
     data: {
       cells,
+      reports,
       boundingBox: bbox,
       radiusKm,
       geohash5CellsQueried: geohash5Cells.length,
@@ -921,18 +876,30 @@ function classifyOSMElement(element: any): PublicDataType | null {
   return null;
 }
 
+const MAX_OVERPASS_RETRIES = 3;
+const RETRY_DELAY_MS = [500, 1500, 3000];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchOSMDataWithRetry(
   bbox: { minLat: number; minLng: number; maxLat: number; maxLng: number },
 ): Promise<OSMDataPoint[]> {
   let lastError: Error | undefined;
   for (const mirror of OVERPASS_MIRRORS) {
-    try {
-      console.log(`Trying Overpass mirror: ${mirror.hostname}`);
-      currentMirror = mirror;
-      return await fetchOSMData(bbox);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      console.warn(`Mirror ${mirror.hostname} failed: ${lastError.message}`);
+    currentMirror = mirror;
+    for (let attempt = 0; attempt < MAX_OVERPASS_RETRIES; attempt++) {
+      try {
+        console.log(`Trying Overpass mirror: ${mirror.hostname} (attempt ${attempt + 1}/${MAX_OVERPASS_RETRIES})`);
+        return await fetchOSMData(bbox);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(`Mirror ${mirror.hostname} attempt ${attempt + 1} failed: ${lastError.message}`);
+        if (attempt < MAX_OVERPASS_RETRIES - 1) {
+          await sleep(RETRY_DELAY_MS[attempt]);
+        }
+      }
     }
   }
   throw lastError;

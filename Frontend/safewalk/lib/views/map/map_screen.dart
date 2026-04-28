@@ -430,16 +430,18 @@ class _MapScreenState extends State<MapScreen> {
       iconColor: const Color(0xFFD97706),
     );
 
-    for (final report in reports) {
-      await mgr.create(
-        PointAnnotationOptions(
-          geometry: Point(coordinates: Position(report.lng, report.lat)),
-          image: markerIcon,
-          iconAnchor: IconAnchor.BOTTOM,
-          iconSize: 0.85,
-        ),
-      );
-    }
+    final options = reports
+        .map(
+          (report) => PointAnnotationOptions(
+            geometry: Point(coordinates: Position(report.lng, report.lat)),
+            image: markerIcon,
+            iconAnchor: IconAnchor.BOTTOM,
+            iconSize: 0.85,
+          ),
+        )
+        .toList(growable: false);
+
+    await mgr.createMulti(options);
   }
 
   void _showCommunityReportDetail(CommunityReportItem report) {
@@ -529,27 +531,64 @@ class _MapScreenState extends State<MapScreen> {
     await pointMgr.deleteAll();
     await reportMgr.deleteAll();
 
+    if (vm.renderGeneration != renderGen) return;
+
     final entries = vm.visibleLayerEntries;
     _lastRenderedEntries = entries;
 
+    final iconsByLayerKey = <String, Uint8List>{};
     for (final entry in entries) {
-      if (vm.renderGeneration != renderGen) return;
-      final style = _layerVisualStyle(entry.layerKey);
-      final markerIcon = await _markerIconForVisual(
-        cacheKey: 'layer:${entry.layerKey}',
-        icon: style.icon,
-        iconColor: style.color,
-      );
-      if (vm.renderGeneration != renderGen) return;
-      await pointMgr.create(
+      if (!iconsByLayerKey.containsKey(entry.layerKey)) {
+        final style = _layerVisualStyle(entry.layerKey);
+        iconsByLayerKey[entry.layerKey] = await _markerIconForVisual(
+          cacheKey: 'layer:${entry.layerKey}',
+          icon: style.icon,
+          iconColor: style.color,
+        );
+        if (vm.renderGeneration != renderGen) return;
+      }
+    }
+
+    final pointOptions = <PointAnnotationOptions>[];
+    for (final entry in entries) {
+      pointOptions.add(
         PointAnnotationOptions(
           geometry: Point(coordinates: Position(entry.lng, entry.lat)),
-          image: markerIcon,
+          image: iconsByLayerKey[entry.layerKey]!,
           iconAnchor: IconAnchor.BOTTOM,
           iconSize: 1,
           symbolSortKey: entry.count.toDouble(),
         ),
       );
+    }
+
+    if (vm.selectedSearchLocation != null) {
+      final searchMarkerIcon = await _markerIconForVisual(
+        cacheKey: 'search-pin',
+        icon: Icons.place_rounded,
+        iconColor: const Color(0xFF2563EB),
+      );
+      if (vm.renderGeneration != renderGen) return;
+      pointOptions.add(
+        PointAnnotationOptions(
+          geometry: Point(
+            coordinates: Position(
+              vm.selectedSearchLocation!.longitude,
+              vm.selectedSearchLocation!.latitude,
+            ),
+          ),
+          image: searchMarkerIcon,
+          iconAnchor: IconAnchor.BOTTOM,
+          iconSize: 1,
+          symbolSortKey: 999,
+        ),
+      );
+    }
+
+    if (vm.renderGeneration != renderGen) return;
+
+    if (pointOptions.isNotEmpty) {
+      await pointMgr.createMulti(pointOptions);
     }
 
     if (vm.reportTapLocation != null) {
@@ -565,28 +604,6 @@ class _MapScreenState extends State<MapScreen> {
           circleColor: const Color(0xFFEF4444).toARGB32(),
           circleStrokeColor: Colors.white.toARGB32(),
           circleStrokeWidth: 2,
-        ),
-      );
-    }
-
-    if (vm.selectedSearchLocation != null) {
-      final searchMarkerIcon = await _markerIconForVisual(
-        cacheKey: 'search-pin',
-        icon: Icons.place_rounded,
-        iconColor: const Color(0xFF2563EB),
-      );
-      await pointMgr.create(
-        PointAnnotationOptions(
-          geometry: Point(
-            coordinates: Position(
-              vm.selectedSearchLocation!.longitude,
-              vm.selectedSearchLocation!.latitude,
-            ),
-          ),
-          image: searchMarkerIcon,
-          iconAnchor: IconAnchor.BOTTOM,
-          iconSize: 1,
-          symbolSortKey: 999,
         ),
       );
     }
@@ -892,12 +909,7 @@ class _MapScreenState extends State<MapScreen> {
           const SizedBox(width: 8),
           IconButton(
             tooltip: 'Daten aktualisieren',
-            onPressed: vm.isLoadingHeatmap
-                ? null
-                : () {
-                    vm.loadHeatmap(force: true);
-                    vm.loadCommunityReports();
-                  },
+            onPressed: vm.isLoadingHeatmap ? null : _refreshData,
             icon: vm.isLoadingHeatmap
                 ? const SizedBox(
                     width: 18,
@@ -912,12 +924,48 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Future<void> _refreshData() async {
+    final map = _mapboxMap;
+    if (map == null) return;
+
+    final camera = await map.getCameraState();
+    final center = camera.center.coordinates;
+
+    MapViewportBounds? viewportBounds;
+    try {
+      final bounds = await map.coordinateBoundsForCamera(
+        CameraOptions(
+          center: camera.center,
+          padding: camera.padding,
+          zoom: camera.zoom,
+          bearing: camera.bearing,
+          pitch: camera.pitch,
+        ),
+      );
+      viewportBounds = MapViewportBounds(
+        north: bounds.northeast.coordinates.lat.toDouble(),
+        south: bounds.southwest.coordinates.lat.toDouble(),
+        east: bounds.northeast.coordinates.lng.toDouble(),
+        west: bounds.southwest.coordinates.lng.toDouble(),
+      );
+    } catch (_) {}
+
+    if (!mounted) return;
+    final vm = context.read<MapViewModel>();
+    vm.onCameraMoved(
+      LatLng(center.lat.toDouble(), center.lng.toDouble()),
+      camera.zoom,
+      viewportBounds: viewportBounds,
+    );
+    vm.loadHeatmap(force: true);
+  }
+
   Future<void> _openLayerSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _LayerSelectionSheet(),
+      builder: (_) => _LayerSelectionSheet(onRefresh: _refreshData),
     );
   }
 
@@ -1059,7 +1107,9 @@ class _SquareControlButton extends StatelessWidget {
 }
 
 class _LayerSelectionSheet extends StatelessWidget {
-  const _LayerSelectionSheet();
+  const _LayerSelectionSheet({required this.onRefresh});
+
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -1118,12 +1168,7 @@ class _LayerSelectionSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: vm.isLoadingHeatmap
-                  ? null
-                  : () {
-                      vm.loadHeatmap(force: true);
-                      vm.loadCommunityReports();
-                    },
+              onPressed: vm.isLoadingHeatmap ? null : onRefresh,
               icon: const Icon(Icons.refresh),
               label: Text(
                 vm.isLoadingHeatmap

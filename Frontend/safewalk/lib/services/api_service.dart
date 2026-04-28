@@ -424,24 +424,6 @@ class ApiService {
     );
   }
 
-  /// Lists community reports in a geographic area.
-  Future<ApiResult> getCommunityReports({
-    required double lat,
-    required double lng,
-    double? radiusKm,
-  }) async {
-    final query = <String, dynamic>{'lat': lat, 'lng': lng};
-    if (radiusKm != null) {
-      query['radiusKm'] = radiusKm;
-    }
-    return _authenticatedRequest(
-      () => _client.get(
-        ApiConstants.heatmapReportsArea,
-        queryParameters: query,
-      ),
-    );
-  }
-
   /// Lists reports created by the currently authenticated user.
   Future<ApiResult> getOwnHeatmapReports() async {
     return _authenticatedRequest(
