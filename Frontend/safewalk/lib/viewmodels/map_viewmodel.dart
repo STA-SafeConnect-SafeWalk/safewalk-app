@@ -77,7 +77,7 @@ class MapViewModel extends ChangeNotifier {
     ),
     HeatmapLayerMetadata(
       key: 'HOSPITAL',
-      label: 'Krankenhaeuser',
+      label: 'Krankenhäuser',
       weight: 0.5,
       iconKey: 'hospital',
     ),
@@ -106,11 +106,6 @@ class MapViewModel extends ChangeNotifier {
       weight: -1,
     ),
     HeatmapReportCategoryMetadata(
-      key: 'SAFE_AREA',
-      label: 'Sicherer Bereich',
-      weight: 2,
-    ),
-    HeatmapReportCategoryMetadata(
       key: 'HIGH_FOOT_TRAFFIC',
       label: 'Hohe Personenfrequenz',
       weight: 1,
@@ -122,7 +117,7 @@ class MapViewModel extends ChangeNotifier {
     ),
     HeatmapReportCategoryMetadata(
       key: 'CRIME_INCIDENT',
-      label: 'Kriminalitaetsvorfall',
+      label: 'Kriminalitätsvorfall',
       weight: -3,
     ),
   ];
@@ -159,9 +154,15 @@ class MapViewModel extends ChangeNotifier {
   String? _selectedReportCategoryKey;
   bool _useCurrentLocationForReport = true;
 
+  List<CommunityReportItem> _communityReports = const [];
+  bool _isLoadingCommunityReports = false;
+
+  LatLng? _savedReportPinLocation;
+
   Timer? _searchTimer;
 
   int _activeHeatmapRequestId = 0;
+  int _renderGeneration = 0;
 
   bool get isInitialized => _initialized;
   bool get isInitializing => _isInitializing;
@@ -190,6 +191,10 @@ class MapViewModel extends ChangeNotifier {
 
   bool get useCurrentLocationForReport => _useCurrentLocationForReport;
   String? get selectedReportCategoryKey => _selectedReportCategoryKey;
+
+  List<CommunityReportItem> get communityReports => _communityReports;
+  bool get isLoadingCommunityReports => _isLoadingCommunityReports;
+  int get renderGeneration => _renderGeneration;
 
   bool get isMapboxConfigured => _mapboxPlacesService.isConfigured;
   String get mapboxAccessToken => MapboxPlacesService.accessToken;
@@ -384,6 +389,63 @@ class MapViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> loadCommunityReports() async {
+    final requestCenter = _mapCenter;
+    final effectiveViewportBounds = _lastViewportBounds;
+
+    final requestRadiusKm = _requiredViewportRadiusKm(
+      _zoom,
+      center: requestCenter,
+      viewportBounds: effectiveViewportBounds,
+    );
+
+    if (requestRadiusKm > _maxRadiusKm) return;
+
+    _isLoadingCommunityReports = true;
+    notifyListeners();
+
+    try {
+      final result = await _apiService.getCommunityReports(
+        lat: requestCenter.latitude,
+        lng: requestCenter.longitude,
+        radiusKm: requestRadiusKm,
+      );
+
+      if (!result.isSuccess || result.data is! Map<String, dynamic>) {
+        _isLoadingCommunityReports = false;
+        notifyListeners();
+        return;
+      }
+
+      final payload = result.data as Map<String, dynamic>;
+      final data = payload['data'];
+      if (data is! Map<String, dynamic>) {
+        _communityReports = const [];
+        _isLoadingCommunityReports = false;
+        notifyListeners();
+        return;
+      }
+
+      final rawReports = data['reports'];
+      if (rawReports is List) {
+        _communityReports = rawReports
+            .whereType<Map>()
+            .map(
+              (item) =>
+                  CommunityReportItem.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList(growable: false);
+      } else {
+        _communityReports = const [];
+      }
+    } catch (_) {
+      _communityReports = const [];
+    } finally {
+      _isLoadingCommunityReports = false;
+      notifyListeners();
+    }
+  }
+
   void onCameraMoved(
     LatLng center,
     double zoom, {
@@ -504,6 +566,7 @@ class MapViewModel extends ChangeNotifier {
 
   void setReportTapLocation(LatLng location) {
     _reportTapLocation = location;
+    _savedReportPinLocation = location;
     _useCurrentLocationForReport = false;
     notifyListeners();
   }
@@ -513,8 +576,19 @@ class MapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearReportState() {
+    _reportTapLocation = null;
+    _savedReportPinLocation = null;
+    notifyListeners();
+  }
+
   void setUseCurrentLocationForReport(bool useCurrent) {
     _useCurrentLocationForReport = useCurrent;
+    if (useCurrent) {
+      _reportTapLocation = null;
+    } else if (_reportTapLocation == null && _savedReportPinLocation != null) {
+      _reportTapLocation = _savedReportPinLocation;
+    }
     notifyListeners();
   }
 
@@ -569,9 +643,8 @@ class MapViewModel extends ChangeNotifier {
       _selectedReportCategoryKey = selectedCategory;
       _successMessage = 'Meldung wurde erfolgreich übermittelt.';
 
-      if (!_useCurrentLocationForReport) {
-        _reportTapLocation = null;
-      }
+      _reportTapLocation = null;
+      _savedReportPinLocation = null;
       _isSubmittingReport = false;
       notifyListeners();
       return true;
@@ -591,6 +664,7 @@ class MapViewModel extends ChangeNotifier {
     final current = updated[index];
     updated[index] = current.copyWith(isSelected: !current.isSelected);
     _publicDataLayers = updated;
+    _renderGeneration++;
     notifyListeners();
   }
 

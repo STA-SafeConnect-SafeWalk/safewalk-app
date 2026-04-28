@@ -76,12 +76,15 @@ class _MapScreenState extends State<MapScreen> {
   MapboxMap? _mapboxMap;
   PointAnnotationManager? _pointAnnotationManager;
   CircleAnnotationManager? _reportPinAnnotationManager;
+  PointAnnotationManager? _communityReportAnnotationManager;
   bool _cameraUpdatesEnabled = false;
   bool _initialCameraSynced = false;
 
   List<HeatmapLayerEntry>? _lastRenderedEntries;
+  List<CommunityReportItem>? _lastRenderedCommunityReports;
   LatLng? _lastReportTapLocation;
   LatLng? _lastSearchLocation;
+  int _lastRenderGeneration = 0;
   final Map<String, Uint8List> _markerIconCache = <String, Uint8List>{};
 
   @override
@@ -100,6 +103,12 @@ class _MapScreenState extends State<MapScreen> {
   void _onViewModelChanged() {
     final vm = context.read<MapViewModel>();
     unawaited(_ensureInitialCameraSync(vm));
+
+    final generationChanged = vm.renderGeneration != _lastRenderGeneration;
+    if (generationChanged) {
+      _lastRenderGeneration = vm.renderGeneration;
+    }
+
     final entries = vm.visibleLayerEntries;
     final reportChanged = !_sameLocation(
       vm.reportTapLocation,
@@ -109,12 +118,22 @@ class _MapScreenState extends State<MapScreen> {
       vm.selectedSearchLocation,
       _lastSearchLocation,
     );
-    if (reportChanged ||
+    if (generationChanged ||
+        reportChanged ||
         searchChanged ||
         !_listEquals(entries, _lastRenderedEntries)) {
       _lastReportTapLocation = vm.reportTapLocation;
       _lastSearchLocation = vm.selectedSearchLocation;
       _syncAnnotations(vm);
+    }
+
+    final communityReports = vm.communityReports;
+    if (!_communityReportsEqual(
+      communityReports,
+      _lastRenderedCommunityReports,
+    )) {
+      _lastRenderedCommunityReports = communityReports;
+      _syncCommunityReportAnnotations(vm);
     }
   }
 
@@ -136,6 +155,18 @@ class _MapScreenState extends State<MapScreen> {
     if (a == null && b == null) return true;
     if (a == null || b == null) return false;
     return a.latitude == b.latitude && a.longitude == b.longitude;
+  }
+
+  bool _communityReportsEqual(
+    List<CommunityReportItem>? a,
+    List<CommunityReportItem>? b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null || a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].reportId != b[i].reportId) return false;
+    }
+    return true;
   }
 
   @override
@@ -217,6 +248,8 @@ class _MapScreenState extends State<MapScreen> {
         .createPointAnnotationManager();
     _reportPinAnnotationManager = await map.annotations
         .createCircleAnnotationManager();
+    _communityReportAnnotationManager = await map.annotations
+        .createPointAnnotationManager();
 
     await map.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
     await map.compass.updateSettings(CompassSettings(enabled: false));
@@ -237,6 +270,7 @@ class _MapScreenState extends State<MapScreen> {
     final vm = context.read<MapViewModel>();
     unawaited(_ensureInitialCameraSync(vm));
     unawaited(_syncAnnotations(vm));
+    unawaited(_syncCommunityReportAnnotations(vm));
   }
 
   Future<void> _ensureInitialCameraSync(MapViewModel vm) async {
@@ -279,22 +313,53 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _onMapTap(MapContentGestureContext gestureContext) {
-    if (!_awaitingReportPin) {
+    final point = gestureContext.point;
+    final coords = point.coordinates;
+    final tappedLat = coords.lat.toDouble();
+    final tappedLng = coords.lng.toDouble();
+
+    if (_awaitingReportPin) {
+      final vm = context.read<MapViewModel>();
+      vm.setReportTapLocation(LatLng(tappedLat, tappedLng));
+      _syncAnnotations(vm);
+      _awaitingReportPin = false;
+      _openReportSheet();
       return;
     }
 
-    final point = gestureContext.point;
-    final coords = point.coordinates;
     final vm = context.read<MapViewModel>();
-    vm.setReportTapLocation(
-      LatLng(coords.lat.toDouble(), coords.lng.toDouble()),
+    final tappedReport = _findNearestCommunityReport(
+      vm.communityReports,
+      tappedLat,
+      tappedLng,
     );
-    _syncAnnotations(vm);
-
-    if (_awaitingReportPin) {
-      _awaitingReportPin = false;
-      _openReportSheet();
+    if (tappedReport != null) {
+      _showCommunityReportDetail(tappedReport);
     }
+  }
+
+  CommunityReportItem? _findNearestCommunityReport(
+    List<CommunityReportItem> reports,
+    double lat,
+    double lng,
+  ) {
+    if (reports.isEmpty) return null;
+
+    const thresholdDeg = 0.0005;
+    CommunityReportItem? closest;
+    double closestDist = double.infinity;
+
+    for (final report in reports) {
+      final dLat = (report.lat - lat).abs();
+      final dLng = (report.lng - lng).abs();
+      if (dLat > thresholdDeg || dLng > thresholdDeg) continue;
+      final dist = dLat * dLat + dLng * dLng;
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = report;
+      }
+    }
+    return closest;
   }
 
   void _onMapIdle(MapIdleEventData event) {
@@ -350,10 +415,116 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
+  Future<void> _syncCommunityReportAnnotations(MapViewModel vm) async {
+    final mgr = _communityReportAnnotationManager;
+    if (mgr == null) return;
+
+    await mgr.deleteAll();
+
+    final reports = vm.communityReports;
+    if (reports.isEmpty) return;
+
+    final markerIcon = await _markerIconForVisual(
+      cacheKey: 'community-report',
+      icon: Icons.campaign_rounded,
+      iconColor: const Color(0xFFD97706),
+    );
+
+    for (final report in reports) {
+      await mgr.create(
+        PointAnnotationOptions(
+          geometry: Point(coordinates: Position(report.lng, report.lat)),
+          image: markerIcon,
+          iconAnchor: IconAnchor.BOTTOM,
+          iconSize: 0.85,
+        ),
+      );
+    }
+  }
+
+  void _showCommunityReportDetail(CommunityReportItem report) {
+    if (!mounted) return;
+
+    final vm = context.read<MapViewModel>();
+    final categoryLabel = vm.reportCategories
+        .where((c) => c.key == report.category)
+        .map((c) => c.label)
+        .firstOrNull ?? report.category;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.campaign_rounded,
+                  color: Color(0xFFD97706),
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    categoryLabel,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (report.description != null &&
+                report.description!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                report.description!,
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: Color(0xFF475569),
+                ),
+              ),
+            ],
+            if (report.createdAt != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Gemeldet am ${_formatDate(report.createdAt!)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(String isoDate) {
+    try {
+      final dt = DateTime.parse(isoDate);
+      return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
+    } catch (_) {
+      return isoDate;
+    }
+  }
+
   Future<void> _syncAnnotations(MapViewModel vm) async {
     final pointMgr = _pointAnnotationManager;
     final reportMgr = _reportPinAnnotationManager;
     if (pointMgr == null || reportMgr == null) return;
+
+    final renderGen = vm.renderGeneration;
 
     await pointMgr.deleteAll();
     await reportMgr.deleteAll();
@@ -362,12 +533,14 @@ class _MapScreenState extends State<MapScreen> {
     _lastRenderedEntries = entries;
 
     for (final entry in entries) {
+      if (vm.renderGeneration != renderGen) return;
       final style = _layerVisualStyle(entry.layerKey);
       final markerIcon = await _markerIconForVisual(
         cacheKey: 'layer:${entry.layerKey}',
         icon: style.icon,
         iconColor: style.color,
       );
+      if (vm.renderGeneration != renderGen) return;
       await pointMgr.create(
         PointAnnotationOptions(
           geometry: Point(coordinates: Position(entry.lng, entry.lat)),
@@ -721,7 +894,10 @@ class _MapScreenState extends State<MapScreen> {
             tooltip: 'Daten aktualisieren',
             onPressed: vm.isLoadingHeatmap
                 ? null
-                : () => vm.loadHeatmap(force: true),
+                : () {
+                    vm.loadHeatmap(force: true);
+                    vm.loadCommunityReports();
+                  },
             icon: vm.isLoadingHeatmap
                 ? const SizedBox(
                     width: 18,
@@ -764,7 +940,7 @@ class _MapScreenState extends State<MapScreen> {
     }
 
     _awaitingReportPin = false;
-    vm.clearReportTapLocation();
+    vm.clearReportState();
     unawaited(_syncAnnotations(vm));
   }
 
@@ -944,7 +1120,10 @@ class _LayerSelectionSheet extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: vm.isLoadingHeatmap
                   ? null
-                  : () => vm.loadHeatmap(force: true),
+                  : () {
+                      vm.loadHeatmap(force: true);
+                      vm.loadCommunityReports();
+                    },
               icon: const Icon(Icons.refresh),
               label: Text(
                 vm.isLoadingHeatmap

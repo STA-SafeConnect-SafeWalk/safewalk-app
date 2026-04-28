@@ -80,6 +80,9 @@ class ApiConstants {
   /// GET  – List own map reports.
   static const String heatmapReports = '/heatmap/reports';
 
+  /// GET – List community reports in a geographic area.
+  static const String heatmapReportsArea = '/heatmap/reports/area';
+
   /// Returns the path for a specific contact: /contacts/{contactId}
   static String contactById(String contactId) => '/contacts/$contactId';
 

@@ -283,6 +283,8 @@ async function handleAPIGatewayEvent(
       return handleSubmitReport(event, reportsTableName);
     case 'GET /heatmap/reports':
       return handleListOwnReports(event, reportsTableName);
+    case 'GET /heatmap/reports/area':
+      return handleListAreaReports(event, reportsTableName);
     case 'DELETE /heatmap/reports/{reportId}':
       return handleDeleteReport(event, reportsTableName);
     case 'GET /heatmap':
@@ -486,6 +488,65 @@ async function handleListOwnReports(
     console.error('Error listing reports:', error);
     return jsonResponse(500, { error: 'Failed to list reports' });
   }
+}
+
+// /heatmap/reports/area — List community reports in a bounding box
+
+async function handleListAreaReports(
+  event: APIGatewayProxyEventV2,
+  reportsTableName: string,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const latStr = event.queryStringParameters?.lat;
+  const lngStr = event.queryStringParameters?.lng;
+  const radiusStr = event.queryStringParameters?.radiusKm;
+
+  if (!latStr || !lngStr) {
+    return jsonResponse(400, { error: 'lat and lng query parameters are required' });
+  }
+
+  const lat = parseFloat(latStr);
+  const lng = parseFloat(lngStr);
+
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return jsonResponse(400, {
+      error: 'Valid lat (-90..90) and lng (-180..180) are required',
+    });
+  }
+
+  let radiusKm = DEFAULT_RADIUS_KM;
+  if (radiusStr) {
+    radiusKm = parseFloat(radiusStr);
+    if (isNaN(radiusKm) || radiusKm <= 0 || radiusKm > MAX_RADIUS_KM) {
+      return jsonResponse(400, {
+        error: `radiusKm must be between 0 and ${MAX_RADIUS_KM}`,
+      });
+    }
+  }
+
+  const bbox = boundingBoxFromCenter(lat, lng, radiusKm);
+  const geohash5Cells = geohashesInBoundingBox(bbox.minLat, bbox.minLng, bbox.maxLat, bbox.maxLng, 5);
+
+  const allReports = await fetchAllReports(reportsTableName, geohash5Cells);
+
+  const reports = allReports
+    .filter((item) => {
+      const rLat = item.lat as number;
+      const rLng = item.lng as number;
+      return rLat >= bbox.minLat && rLat <= bbox.maxLat && rLng >= bbox.minLng && rLng <= bbox.maxLng;
+    })
+    .map((item) => ({
+      reportId: item.reportId,
+      category: item.category,
+      lat: item.lat,
+      lng: item.lng,
+      description: item.description ?? null,
+      createdAt: item.createdAt,
+    }));
+
+  return jsonResponse(200, { success: true, data: { reports } });
 }
 
 // /heatmap/reports/{reportId} — Delete own report

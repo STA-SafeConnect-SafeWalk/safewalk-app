@@ -119,6 +119,35 @@ class HeatmapLayerEntry {
   final int count;
 }
 
+class CommunityReportItem {
+  const CommunityReportItem({
+    required this.reportId,
+    required this.category,
+    required this.lat,
+    required this.lng,
+    this.description,
+    this.createdAt,
+  });
+
+  final String reportId;
+  final String category;
+  final double lat;
+  final double lng;
+  final String? description;
+  final String? createdAt;
+
+  factory CommunityReportItem.fromJson(Map<String, dynamic> json) {
+    return CommunityReportItem(
+      reportId: (json['reportId'] ?? '').toString(),
+      category: (json['category'] ?? '').toString(),
+      lat: _toDouble(json['lat']) ?? 0,
+      lng: _toDouble(json['lng']) ?? 0,
+      description: json['description'] as String?,
+      createdAt: json['createdAt'] as String?,
+    );
+  }
+}
+
 Map<String, int> _toIntMap(dynamic value) {
   if (value is! Map) return const {};
   final result = <String, int>{};
