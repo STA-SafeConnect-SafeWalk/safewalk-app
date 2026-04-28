@@ -1,14 +1,21 @@
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   DynamoDBDocumentClient,
+  DeleteCommand,
   GetCommand,
   PutCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
+import {
+  CognitoIdentityProviderClient,
+  AdminUpdateUserAttributesCommand,
+  AdminDeleteUserCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import { handler as _handler } from '../user-profile-handler/index';
 const handler = _handler as (event: any) => Promise<any>;
 
 const ddbMock = mockClient(DynamoDBDocumentClient);
+const cognitoMock = mockClient(CognitoIdentityProviderClient);
 
 jest.mock('https', () => {
   const actual = jest.requireActual('https');
@@ -72,6 +79,7 @@ describe('user-profile-handler', () => {
 
   beforeEach(() => {
     ddbMock.reset();
+    cognitoMock.reset();
     mockHttpsRequest.mockReset();
     process.env = {
       ...originalEnv,
@@ -79,6 +87,7 @@ describe('user-profile-handler', () => {
       PLATFORM_DOMAIN: 'https://platform.example.com',
       VENDOR_ID: 'vendor-001',
       API_KEY: 'test-api-key',
+      COGNITO_USER_POOL_ID: 'us-east-1_TestPool',
     };
   });
 
@@ -467,6 +476,119 @@ describe('user-profile-handler', () => {
         makeEvent('DELETE /contacts/{contactId}', 'cognito-user-123', undefined, { contactId: 'c1' }),
       );
       expect(res.statusCode).toBe(502);
+    });
+  });
+
+  // PATCH /me
+  describe('PATCH /me', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const res = await handler(makeUnauthEvent('PATCH /me'));
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 500 when COGNITO_USER_POOL_ID is missing', async () => {
+      delete process.env.COGNITO_USER_POOL_ID;
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: 'Alice' }));
+      expect(res.statusCode).toBe(500);
+      expect(JSON.parse(res.body).error).toMatch(/COGNITO_USER_POOL_ID/);
+    });
+
+    it('returns 400 when body is missing', async () => {
+      const res = await handler(makeEvent('PATCH /me'));
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when displayName is missing from body', async () => {
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', {}));
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 when displayName is empty', async () => {
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: '   ' }));
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 404 when user profile does not exist', async () => {
+      ddbMock.on(GetCommand).resolves({ Item: undefined });
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: 'Alice' }));
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 200 and updates displayName', async () => {
+      ddbMock
+        .on(GetCommand)
+        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com', displayName: 'Old Name' } });
+      ddbMock.on(UpdateCommand).resolves({});
+      cognitoMock.on(AdminUpdateUserAttributesCommand).resolves({});
+
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: '  Alice  ' }));
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.displayName).toBe('Alice');
+    });
+
+    it('returns 200 even when Cognito update fails (non-fatal)', async () => {
+      ddbMock
+        .on(GetCommand)
+        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com' } });
+      ddbMock.on(UpdateCommand).resolves({});
+      cognitoMock.on(AdminUpdateUserAttributesCommand).rejects(new Error('Cognito error'));
+
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: 'Alice' }));
+      expect(res.statusCode).toBe(200);
+    });
+  });
+
+  // DELETE /me
+  describe('DELETE /me', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const res = await handler(makeUnauthEvent('DELETE /me'));
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 500 when COGNITO_USER_POOL_ID is missing', async () => {
+      delete process.env.COGNITO_USER_POOL_ID;
+      const res = await handler(makeEvent('DELETE /me'));
+      expect(res.statusCode).toBe(500);
+      expect(JSON.parse(res.body).error).toMatch(/COGNITO_USER_POOL_ID/);
+    });
+
+    it('returns 404 when user profile does not exist', async () => {
+      ddbMock.on(GetCommand).resolves({ Item: undefined });
+      const res = await handler(makeEvent('DELETE /me'));
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 204 and deletes user from DynamoDB and Cognito', async () => {
+      ddbMock
+        .on(GetCommand)
+        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com' } });
+      ddbMock.on(DeleteCommand).resolves({});
+      cognitoMock.on(AdminDeleteUserCommand).resolves({});
+
+      const res = await handler(makeEvent('DELETE /me'));
+      expect(res.statusCode).toBe(204);
+    });
+
+    it('returns 204 even when Cognito delete fails (non-fatal)', async () => {
+      ddbMock
+        .on(GetCommand)
+        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com' } });
+      ddbMock.on(DeleteCommand).resolves({});
+      cognitoMock.on(AdminDeleteUserCommand).rejects(new Error('Cognito error'));
+
+      const res = await handler(makeEvent('DELETE /me'));
+      expect(res.statusCode).toBe(204);
+    });
+
+    it('returns 500 when DynamoDB delete fails', async () => {
+      ddbMock
+        .on(GetCommand)
+        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com' } });
+      ddbMock.on(DeleteCommand).rejects(new Error('DynamoDB error'));
+
+      const res = await handler(makeEvent('DELETE /me'));
+      expect(res.statusCode).toBe(500);
     });
   });
 });

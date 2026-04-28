@@ -134,6 +134,20 @@ export class ApiStack extends cdk.Stack {
       });
 
       httpApi.addRoutes({
+        path: '/me',
+        methods: [apigateway.HttpMethod.PATCH],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/me',
+        methods: [apigateway.HttpMethod.DELETE],
+        integration: userLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
         path: '/register',
         methods: [apigateway.HttpMethod.POST],
         integration: userLambdaIntegration,

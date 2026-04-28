@@ -4,6 +4,7 @@
   "description": "Lambda function for SafeWalk user registration",
   "main": "index.js",
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.709.0",
     "@aws-sdk/client-dynamodb": "^3.709.0",
     "@aws-sdk/lib-dynamodb": "^3.709.0"
   },
