@@ -4,16 +4,13 @@ import 'package:http/http.dart' as http;
 import 'package:safewalk/models/map_models.dart';
 
 class MapboxPlacesService {
-  MapboxPlacesService({
-    http.Client? client,
-    String? geocodingBaseUrl,
-  }) : _client = client ?? http.Client(),
-       _geocodingBaseUrl =
-           geocodingBaseUrl ??
-           'https://api.mapbox.com/geocoding/v5/mapbox.places';
+  MapboxPlacesService({http.Client? client, String? geocodingBaseUrl})
+    : _client = client ?? http.Client(),
+      _geocodingBaseUrl =
+          geocodingBaseUrl ??
+          'https://api.mapbox.com/geocoding/v5/mapbox.places';
 
-  static const accessToken =
-      '';
+  static const accessToken = '';
 
   static const styleUri =
       'mapbox://styles/safewalkteam/cmobay96u00a801s805jsegqr';
@@ -47,9 +44,9 @@ class MapboxPlacesService {
     );
 
     try {
-      final response = await _client.get(uri).timeout(
-        const Duration(seconds: 10),
-      );
+      final response = await _client
+          .get(uri)
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return const [];
       }
