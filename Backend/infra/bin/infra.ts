@@ -24,7 +24,11 @@ for (const name of required) {
 }
 
 const authStack = new AuthStack(app, 'safewalk-app-auth-stack', { env });
-const userStack = new UserStack(app, 'safewalk-app-user-stack', { env });
+const userStack = new UserStack(app, 'safewalk-app-user-stack', {
+  env,
+  userPoolId: authStack.userPool.userPoolId,
+  userPoolArn: authStack.userPool.userPoolArn,
+});
 const notificationStack = new NotificationStack(app, 'safewalk-app-notification-stack', { env });
 const sosStack = new SosStack(app, 'safewalk-app-sos-stack', {
   env,
