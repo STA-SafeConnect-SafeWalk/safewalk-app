@@ -307,12 +307,14 @@ async function handleUpdateMe(
   const trimmedName = displayName.trim();
 
   let email: string | undefined;
+  let safeWalkId: string | undefined;
   try {
     const result = await docClient.send(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
     if (!result.Item) return jsonResponse(404, { error: 'User profile not found' });
     email = result.Item.email as string | undefined;
+    safeWalkId = result.Item.safeWalkId as string | undefined;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return jsonResponse(500, {
@@ -356,11 +358,27 @@ async function handleUpdateMe(
     }
   }
 
+  // Propagate the updated name to the SafeWalk platform (best-effort).
+  // This ensures contacts see the new display name when fetching the contacts list.
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  const apiKey = getEnv('API_KEY');
+  if (safeWalkId && platformBaseDomain && apiKey) {
+    try {
+      await sendRequest<{ success: boolean }>(
+        `${platformBaseDomain}/users/${encodeURIComponent(safeWalkId)}`,
+        'PATCH',
+        apiKey,
+        { name: trimmedName },
+      );
+      console.log('Platform user name updated for safeWalkId:', safeWalkId);
+    } catch (error) {
+      console.error('Error updating platform user name (non-fatal):', error);
+    }
+  }
+
   console.log('User profile updated:', userId);
   return jsonResponse(200, { message: 'Profile updated successfully', displayName: trimmedName });
 }
-
-// Handler: DELETE /me  –  permanently delete the user's account
 async function handleDeleteMe(
   event: APIGatewayProxyEventV2,
   tableName: string,

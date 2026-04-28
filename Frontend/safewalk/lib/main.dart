@@ -59,7 +59,7 @@ void main() {
             headphoneService: headphoneService,
           ),
         ),
-        ChangeNotifierProvider(create: (_) => SettingsViewModel()),
+        ChangeNotifierProvider(create: (_) => SettingsViewModel(apiService: apiService)),
       ],
       child: const SafeWalkApp(),
     ),

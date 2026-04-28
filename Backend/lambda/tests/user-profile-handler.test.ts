@@ -537,6 +537,43 @@ describe('user-profile-handler', () => {
       const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: 'Alice' }));
       expect(res.statusCode).toBe(200);
     });
+
+    it('propagates name to platform when safeWalkId is present', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: {
+          safeWalkAppId: 'cognito-user-123',
+          email: 'alice@test.com',
+          safeWalkId: 'sw-123',
+        },
+      });
+      ddbMock.on(UpdateCommand).resolves({});
+      cognitoMock.on(AdminUpdateUserAttributesCommand).resolves({});
+      setupHttpsMock(200, { success: true, data: { safeWalkId: 'sw-123', name: 'Alice' } });
+
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: 'Alice' }));
+      expect(res.statusCode).toBe(200);
+      // Verify the HTTPS call went out (platform propagation)
+      expect(mockHttpsRequest).toHaveBeenCalledTimes(1);
+      const callArg = mockHttpsRequest.mock.calls[0][0];
+      expect(callArg.path).toMatch(/\/users\/sw-123$/);
+      expect(callArg.method).toBe('PATCH');
+    });
+
+    it('returns 200 even when platform propagation fails (non-fatal)', async () => {
+      ddbMock.on(GetCommand).resolves({
+        Item: {
+          safeWalkAppId: 'cognito-user-123',
+          email: 'alice@test.com',
+          safeWalkId: 'sw-123',
+        },
+      });
+      ddbMock.on(UpdateCommand).resolves({});
+      cognitoMock.on(AdminUpdateUserAttributesCommand).resolves({});
+      setupHttpsMock(500, { error: 'platform error' });
+
+      const res = await handler(makeEvent('PATCH /me', 'cognito-user-123', { displayName: 'Alice' }));
+      expect(res.statusCode).toBe(200);
+    });
   });
 
   // DELETE /me
