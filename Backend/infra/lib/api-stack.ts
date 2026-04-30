@@ -309,6 +309,13 @@ export class ApiStack extends cdk.Stack {
       });
 
       httpApi.addRoutes({
+        path: '/heatmap/metadata',
+        methods: [apigateway.HttpMethod.GET],
+        integration: heatmapLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
         path: '/heatmap/reports',
         methods: [apigateway.HttpMethod.POST],
         integration: heatmapLambdaIntegration,

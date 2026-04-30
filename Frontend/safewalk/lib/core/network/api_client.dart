@@ -11,6 +11,7 @@
 //   client.authToken = 'eyJ...';       // optional – enables auth header
 //   final result = await client.get('/users');
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:safewalk/core/network/api_result.dart';
@@ -28,7 +29,7 @@ class ApiClient {
 
   ApiClient({
     required this.baseUrl,
-    this.timeout = const Duration(seconds: 30),
+    this.timeout = const Duration(seconds: 15),
     this.authToken,
   });
 
@@ -44,18 +45,26 @@ class ApiClient {
     String endpoint, {
     Map<String, String>? headers,
     Map<String, dynamic>? queryParameters,
+    http.Client? client,
   }) async {
+    final effectiveClient = client ?? http.Client();
+    final ownsClient = client == null;
+
     try {
       final uri = _buildUri(endpoint, queryParameters);
-      final response = await http
+      final response = await effectiveClient
           .get(uri, headers: _buildHeaders(headers))
           .timeout(timeout);
       return _handleResponse(response);
     } catch (e) {
       return ApiResult.error(
         statusCode: 0,
-        message: 'GET request failed: ${e.toString()}',
+        message: _userFriendlyError(e),
       );
+    } finally {
+      if (ownsClient) {
+        effectiveClient.close();
+      }
     }
   }
 
@@ -78,7 +87,7 @@ class ApiClient {
     } catch (e) {
       return ApiResult.error(
         statusCode: 0,
-        message: 'POST request failed: ${e.toString()}',
+        message: _userFriendlyError(e),
       );
     }
   }
@@ -102,7 +111,7 @@ class ApiClient {
     } catch (e) {
       return ApiResult.error(
         statusCode: 0,
-        message: 'PUT request failed: ${e.toString()}',
+        message: _userFriendlyError(e),
       );
     }
   }
@@ -126,7 +135,7 @@ class ApiClient {
     } catch (e) {
       return ApiResult.error(
         statusCode: 0,
-        message: 'PATCH request failed: ${e.toString()}',
+        message: _userFriendlyError(e),
       );
     }
   }
@@ -145,7 +154,7 @@ class ApiClient {
     } catch (e) {
       return ApiResult.error(
         statusCode: 0,
-        message: 'DELETE request failed: ${e.toString()}',
+        message: _userFriendlyError(e),
       );
     }
   }
@@ -194,10 +203,24 @@ class ApiClient {
         rawBody: response.body,
       );
     } else {
+      final parsed = _parseBody(response.body);
+      final serverMessage = parsed is Map ? parsed['error'] as String? : null;
+      final String message;
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        message = 'Please log in again to continue.';
+      } else if (response.statusCode == 404) {
+        message = 'The requested data could not be found.';
+      } else if (response.statusCode >= 500) {
+        message = 'Server error. Please try again later.';
+      } else if (serverMessage != null && serverMessage.isNotEmpty) {
+        message = serverMessage;
+      } else {
+        message = 'Something went wrong. Please try again.';
+      }
       return ApiResult.error(
         statusCode: response.statusCode,
-        message: 'Request failed with status ${response.statusCode}',
-        data: _parseBody(response.body),
+        message: message,
+        data: parsed,
       );
     }
   }
@@ -210,5 +233,25 @@ class ApiClient {
     } catch (_) {
       return body;
     }
+  }
+
+  /// Converts a raw exception into a user-friendly error message.
+  String _userFriendlyError(Object e) {
+    if (e is TimeoutException) {
+      return 'The server took too long to respond. Please try again.';
+    }
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('socketexception') ||
+        msg.contains('connection refused') ||
+        msg.contains('network is unreachable') ||
+        msg.contains('no address associated') ||
+        msg.contains('failed host lookup')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+    if (msg.contains('connection reset') ||
+        msg.contains('connection closed')) {
+      return 'Connection lost. Please try again.';
+    }
+    return 'Something went wrong. Please try again later.';
   }
 }

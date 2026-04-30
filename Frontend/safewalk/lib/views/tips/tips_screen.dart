@@ -65,7 +65,7 @@ class _TipsScreenState extends State<TipsScreen> {
               child: TextField(
                 onChanged: vm.setSearchQuery,
                 decoration: InputDecoration(
-                  hintText: 'Tipps durchsuchen',
+                  hintText: 'Tipps durchsuchen...',
                   prefixIcon: const Icon(Icons.search),
                   fillColor: _kSearchBackground,
                   filled: true,

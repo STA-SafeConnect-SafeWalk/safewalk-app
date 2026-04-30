@@ -141,6 +141,73 @@ describe('heatmap-handler', () => {
       expect(result.statusCode).toBe(500);
       expect(JSON.parse(result.body as string).error).toContain('HEATMAP_PUBLIC_DATA_TABLE_NAME');
     });
+
+    it('should allow metadata route without table env vars', async () => {
+      delete process.env.HEATMAP_REPORTS_TABLE_NAME;
+      delete process.env.HEATMAP_PUBLIC_DATA_TABLE_NAME;
+
+      const event = generateApiGatewayEvent('GET', '/heatmap/metadata');
+      const result = await invokeHandler(event);
+
+      expect(result.statusCode).toBe(200);
+      const body = JSON.parse(result.body as string);
+      expect(body.success).toBe(true);
+      expect(Array.isArray(body.data.reportCategories)).toBe(true);
+      expect(Array.isArray(body.data.publicDataLayers)).toBe(true);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // GET /heatmap/metadata
+  // -----------------------------------------------------------------------
+
+  describe('GET /heatmap/metadata', () => {
+    it('should return 401 when not authenticated', async () => {
+      const event = generateApiGatewayEvent('GET', '/heatmap/metadata');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (event.requestContext as any).authorizer = {};
+
+      const result = await invokeHandler(event);
+      expect(result.statusCode).toBe(401);
+    });
+
+    it('should return metadata payload', async () => {
+      const event = generateApiGatewayEvent('GET', '/heatmap/metadata');
+      const result = await invokeHandler(event);
+
+      expect(result.statusCode).toBe(200);
+      const body = JSON.parse(result.body as string);
+
+      expect(body.success).toBe(true);
+
+      expect(Array.isArray(body.data.reportCategories)).toBe(true);
+      expect(body.data.reportCategories).toHaveLength(7);
+      expect(body.data.reportCategories).toContainEqual(
+        expect.objectContaining({ key: 'SAFE_AREA', weight: 2 }),
+      );
+
+      expect(Array.isArray(body.data.publicDataLayers)).toBe(true);
+      expect(body.data.publicDataLayers).toHaveLength(6);
+      expect(body.data.publicDataLayers).toContainEqual(
+        expect.objectContaining({ key: 'STREET_LAMP', weight: 0.5 }),
+      );
+
+      expect(body.data.defaults).toEqual(
+        expect.objectContaining({
+          radiusKm: 2,
+          maxRadiusKm: 10,
+          maxReportsPerDay: 50,
+          maxDescriptionLength: 500,
+          reportTtlDays: 90,
+          publicDataTtlHours: 24,
+        }),
+      );
+
+      expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(0);
+      expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
+      expect(ddbMock.commandCalls(DeleteCommand)).toHaveLength(0);
+      expect(ddbMock.commandCalls(BatchWriteCommand)).toHaveLength(0);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -435,7 +502,7 @@ describe('heatmap-handler', () => {
       expect(JSON.parse(result.body as string).error).toContain('radiusKm');
     });
 
-    it('should return heatmap data with aggregated cells', async () => {
+    it('should return heatmap data with individual points', async () => {
       // Mock: all DynamoDB queries return user reports in one cell + fresh cache metadata
       const queryResponses: Array<{ Items?: Record<string, unknown>[]; Count?: number }> = [];
 
@@ -515,10 +582,13 @@ describe('heatmap-handler', () => {
 
       const body = JSON.parse(result.body as string);
       expect(body.success).toBe(true);
-      expect(body.data.cells).toBeDefined();
+      expect(body.data.points).toBeDefined();
+      expect(Array.isArray(body.data.points)).toBe(true);
       expect(body.data.boundingBox).toBeDefined();
       expect(body.data.radiusKm).toBe(1);
       expect(body.data.queriedAt).toBeDefined();
+      expect(body.data.meta).toBeDefined();
+      expect(body.data.meta.totalPoints).toBeGreaterThan(0);
 
       // Verify no userId is leaked in the response
       const responseStr = result.body as string;

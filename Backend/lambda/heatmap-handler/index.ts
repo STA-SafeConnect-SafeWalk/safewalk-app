@@ -20,15 +20,14 @@ const MAX_DESCRIPTION_LENGTH = 500;
 const MAX_RADIUS_KM = 10;
 const DEFAULT_RADIUS_KM = 2;
 const OVERPASS_MIRRORS = [
-  { hostname: 'overpass.kumi.systems', path: '/api/interpreter' },
   { hostname: 'overpass-api.de', path: '/api/interpreter' },
+  { hostname: 'lz4.overpass-api.de', path: '/api/interpreter' },
 ];
 
 const REPORT_CATEGORIES = [
   'UNSAFE_AREA',
   'WELL_LIT',
   'POORLY_LIT',
-  'SAFE_AREA',
   'HIGH_FOOT_TRAFFIC',
   'LOW_FOOT_TRAFFIC',
   'CRIME_INCIDENT',
@@ -38,13 +37,21 @@ type ReportCategory = (typeof REPORT_CATEGORIES)[number];
 
 // Positive = safer, negative = more dangerous
 const REPORT_CATEGORY_WEIGHTS: Record<ReportCategory, number> = {
-  SAFE_AREA: 2,
   WELL_LIT: 1,
   HIGH_FOOT_TRAFFIC: 1,
   POORLY_LIT: -1,
   LOW_FOOT_TRAFFIC: -1,
   UNSAFE_AREA: -2,
   CRIME_INCIDENT: -3,
+};
+
+const REPORT_CATEGORY_LABELS: Record<ReportCategory, string> = {
+  WELL_LIT: 'Gut beleuchtet',
+  HIGH_FOOT_TRAFFIC: 'Hohe Personenfrequenz',
+  POORLY_LIT: 'Schlecht beleuchtet',
+  LOW_FOOT_TRAFFIC: 'Geringe Personenfrequenz',
+  UNSAFE_AREA: 'Unsicherer Bereich',
+  CRIME_INCIDENT: 'Kriminalitätsvorfall',
 };
 
 type PublicDataType =
@@ -62,6 +69,24 @@ const PUBLIC_DATA_WEIGHTS: Record<PublicDataType, number> = {
   POLICE_STATION: 1,
   HOSPITAL: 0.5,
   EMERGENCY_PHONE: 0.5,
+};
+
+const PUBLIC_DATA_LABELS: Record<PublicDataType, string> = {
+  STREET_LAMP: 'Strassenlaternen',
+  LIT_WAY: 'Beleuchtete Wege',
+  UNLIT_WAY: 'Unbeleuchtete Wege',
+  POLICE_STATION: 'Polizeistationen',
+  HOSPITAL: 'Krankenhäuser',
+  EMERGENCY_PHONE: 'Notruftelefone',
+};
+
+const PUBLIC_DATA_ICON_KEYS: Record<PublicDataType, string> = {
+  STREET_LAMP: 'street_lamp',
+  LIT_WAY: 'lit_way',
+  UNLIT_WAY: 'unlit_way',
+  POLICE_STATION: 'police_station',
+  HOSPITAL: 'hospital',
+  EMERGENCY_PHONE: 'emergency_phone',
 };
 
 interface SubmitReportRequest {
@@ -243,6 +268,10 @@ export const handler = async (event: any): Promise<APIGatewayProxyResultV2> => {
 async function handleAPIGatewayEvent(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> {
+  if (event.routeKey === 'GET /heatmap/metadata') {
+    return handleHeatmapMetadata(event);
+  }
+
   const reportsTableName = getEnv('HEATMAP_REPORTS_TABLE_NAME');
   if (!reportsTableName) return missingEnvResponse('HEATMAP_REPORTS_TABLE_NAME');
 
@@ -261,6 +290,42 @@ async function handleAPIGatewayEvent(
     default:
       return jsonResponse(404, { error: 'Route not found' });
   }
+}
+
+async function handleHeatmapMetadata(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const userId = getAuthenticatedUserId(event);
+  if (!userId) return UNAUTHORIZED_RESPONSE;
+
+  const publicDataLayers = (Object.keys(PUBLIC_DATA_WEIGHTS) as PublicDataType[]).map((key) => ({
+    key,
+    label: PUBLIC_DATA_LABELS[key],
+    weight: PUBLIC_DATA_WEIGHTS[key],
+    iconKey: PUBLIC_DATA_ICON_KEYS[key],
+  }));
+
+  const reportCategories = REPORT_CATEGORIES.map((key) => ({
+    key,
+    label: REPORT_CATEGORY_LABELS[key],
+    weight: REPORT_CATEGORY_WEIGHTS[key],
+  }));
+
+  return jsonResponse(200, {
+    success: true,
+    data: {
+      publicDataLayers,
+      reportCategories,
+      defaults: {
+        radiusKm: DEFAULT_RADIUS_KM,
+        maxRadiusKm: MAX_RADIUS_KM,
+        maxReportsPerDay: MAX_REPORTS_PER_DAY,
+        maxDescriptionLength: MAX_DESCRIPTION_LENGTH,
+        reportTtlDays: REPORT_TTL_DAYS,
+        publicDataTtlHours: PUBLIC_DATA_TTL_HOURS,
+      },
+    },
+  });
 }
 
 // /post/heatmap/reports — Submit a new report
@@ -581,10 +646,26 @@ async function handleQueryHeatmap(
     });
   }
 
+  const reports = reportsByCell
+    .filter((item) => {
+      const rLat = item.lat as number;
+      const rLng = item.lng as number;
+      return rLat >= bbox.minLat && rLat <= bbox.maxLat && rLng >= bbox.minLng && rLng <= bbox.maxLng;
+    })
+    .map((item) => ({
+      reportId: item.reportId,
+      category: item.category,
+      lat: item.lat,
+      lng: item.lng,
+      description: item.description ?? null,
+      createdAt: item.createdAt,
+    }));
+
   return jsonResponse(200, {
     success: true,
     data: {
       cells,
+      reports,
       boundingBox: bbox,
       radiusKm,
       geohash5CellsQueried: geohash5Cells.length,
@@ -795,18 +876,30 @@ function classifyOSMElement(element: any): PublicDataType | null {
   return null;
 }
 
+const MAX_OVERPASS_RETRIES = 3;
+const RETRY_DELAY_MS = [500, 1500, 3000];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchOSMDataWithRetry(
   bbox: { minLat: number; minLng: number; maxLat: number; maxLng: number },
 ): Promise<OSMDataPoint[]> {
   let lastError: Error | undefined;
   for (const mirror of OVERPASS_MIRRORS) {
-    try {
-      console.log(`Trying Overpass mirror: ${mirror.hostname}`);
-      currentMirror = mirror;
-      return await fetchOSMData(bbox);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      console.warn(`Mirror ${mirror.hostname} failed: ${lastError.message}`);
+    currentMirror = mirror;
+    for (let attempt = 0; attempt < MAX_OVERPASS_RETRIES; attempt++) {
+      try {
+        console.log(`Trying Overpass mirror: ${mirror.hostname} (attempt ${attempt + 1}/${MAX_OVERPASS_RETRIES})`);
+        return await fetchOSMData(bbox);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(`Mirror ${mirror.hostname} attempt ${attempt + 1} failed: ${lastError.message}`);
+        if (attempt < MAX_OVERPASS_RETRIES - 1) {
+          await sleep(RETRY_DELAY_MS[attempt]);
+        }
+      }
     }
   }
   throw lastError;
