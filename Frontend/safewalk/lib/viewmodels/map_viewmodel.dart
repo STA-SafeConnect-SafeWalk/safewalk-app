@@ -149,7 +149,7 @@ class MapViewModel extends ChangeNotifier {
 
   List<HeatmapLayerMetadata> _publicDataLayers = const [];
   List<HeatmapReportCategoryMetadata> _reportCategories = const [];
-  List<HeatmapCellModel> _cells = const [];
+  List<PublicDataPoint> _publicDataPoints = const [];
 
   String? _selectedReportCategoryKey;
   bool _useCurrentLocationForReport = true;
@@ -186,7 +186,7 @@ class MapViewModel extends ChangeNotifier {
 
   List<HeatmapLayerMetadata> get publicDataLayers => _publicDataLayers;
   List<HeatmapReportCategoryMetadata> get reportCategories => _reportCategories;
-  List<HeatmapCellModel> get cells => _cells;
+  List<PublicDataPoint> get publicDataPoints => _publicDataPoints;
 
   bool get useCurrentLocationForReport => _useCurrentLocationForReport;
   String? get selectedReportCategoryKey => _selectedReportCategoryKey;
@@ -235,10 +235,8 @@ class MapViewModel extends ChangeNotifier {
       totals[layer.key] = 0;
     }
 
-    for (final cell in _cells) {
-      for (final entry in cell.publicDataCounts.entries) {
-        totals[entry.key] = (totals[entry.key] ?? 0) + entry.value;
-      }
+    for (final point in _publicDataPoints) {
+      totals[point.type] = (totals[point.type] ?? 0) + 1;
     }
 
     return totals;
@@ -246,40 +244,29 @@ class MapViewModel extends ChangeNotifier {
 
   List<HeatmapLayerEntry> get visibleLayerEntries {
     final selected = selectedLayers;
-    if (selected.isEmpty || _cells.isEmpty) return const [];
+    if (selected.isEmpty || _publicDataPoints.isEmpty) return const [];
 
-    final selectedByKey = {
+    final selectedKeys = {
       for (final layer in selected) layer.key: layer.label,
     };
 
     final entries = <HeatmapLayerEntry>[];
 
-    for (final cell in _cells) {
-      String? strongestKey;
-      int strongestCount = 0;
+    for (final point in _publicDataPoints) {
+      final label = selectedKeys[point.type];
+      if (label == null) continue;
 
-      for (final selectedEntry in selectedByKey.entries) {
-        final count = cell.publicDataCounts[selectedEntry.key] ?? 0;
-        if (count > strongestCount) {
-          strongestCount = count;
-          strongestKey = selectedEntry.key;
-        }
-      }
-
-      if (strongestKey != null && strongestCount > 0) {
-        entries.add(
-          HeatmapLayerEntry(
-            layerKey: strongestKey,
-            layerLabel: selectedByKey[strongestKey] ?? strongestKey,
-            lat: cell.centerLat,
-            lng: cell.centerLng,
-            count: strongestCount,
-          ),
-        );
-      }
+      entries.add(
+        HeatmapLayerEntry(
+          layerKey: point.type,
+          layerLabel: label,
+          lat: point.lat,
+          lng: point.lng,
+          count: 1,
+        ),
+      );
     }
 
-    entries.sort((a, b) => b.count.compareTo(a.count));
     return entries;
   }
 
@@ -351,21 +338,21 @@ class MapViewModel extends ChangeNotifier {
       final payload = result.data as Map<String, dynamic>;
       final data = payload['data'];
       if (data is! Map<String, dynamic>) {
-        _cells = const [];
+        _publicDataPoints = const [];
         return;
       }
 
-      final rawCells = data['cells'];
-      if (rawCells is List) {
-        _cells = rawCells
+      final rawPoints = data['publicDataPoints'];
+      if (rawPoints is List) {
+        _publicDataPoints = rawPoints
             .whereType<Map>()
             .map(
               (item) =>
-                  HeatmapCellModel.fromJson(Map<String, dynamic>.from(item)),
+                  PublicDataPoint.fromJson(Map<String, dynamic>.from(item)),
             )
             .toList(growable: false);
       } else {
-        _cells = const [];
+        _publicDataPoints = const [];
       }
 
       final rawReports = data['reports'];
@@ -373,9 +360,8 @@ class MapViewModel extends ChangeNotifier {
         _communityReports = rawReports
             .whereType<Map>()
             .map(
-              (item) => CommunityReportItem.fromJson(
-                Map<String, dynamic>.from(item),
-              ),
+              (item) =>
+                  CommunityReportItem.fromJson(Map<String, dynamic>.from(item)),
             )
             .toList(growable: false);
       } else {

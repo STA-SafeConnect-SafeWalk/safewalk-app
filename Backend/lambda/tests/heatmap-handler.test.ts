@@ -502,7 +502,7 @@ describe('heatmap-handler', () => {
       expect(JSON.parse(result.body as string).error).toContain('radiusKm');
     });
 
-    it('should return heatmap data with aggregated cells', async () => {
+    it('should return heatmap data with individual points', async () => {
       // Mock: all DynamoDB queries return user reports in one cell + fresh cache metadata
       const queryResponses: Array<{ Items?: Record<string, unknown>[]; Count?: number }> = [];
 
@@ -582,10 +582,13 @@ describe('heatmap-handler', () => {
 
       const body = JSON.parse(result.body as string);
       expect(body.success).toBe(true);
-      expect(body.data.cells).toBeDefined();
+      expect(body.data.points).toBeDefined();
+      expect(Array.isArray(body.data.points)).toBe(true);
       expect(body.data.boundingBox).toBeDefined();
       expect(body.data.radiusKm).toBe(1);
       expect(body.data.queriedAt).toBeDefined();
+      expect(body.data.meta).toBeDefined();
+      expect(body.data.meta.totalPoints).toBeGreaterThan(0);
 
       // Verify no userId is leaked in the response
       const responseStr = result.body as string;

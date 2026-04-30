@@ -57,34 +57,25 @@ class HeatmapReportCategoryMetadata {
   }
 }
 
-class HeatmapCellModel {
-  const HeatmapCellModel({
-    required this.geohash,
-    required this.centerLat,
-    required this.centerLng,
-    required this.safetyScore,
-    required this.reportCounts,
-    required this.publicDataCounts,
-    required this.totalDataPoints,
+class PublicDataPoint {
+  const PublicDataPoint({
+    required this.lat,
+    required this.lng,
+    required this.type,
+    required this.osmId,
   });
 
-  final String geohash;
-  final double centerLat;
-  final double centerLng;
-  final double? safetyScore;
-  final Map<String, int> reportCounts;
-  final Map<String, int> publicDataCounts;
-  final int totalDataPoints;
+  final double lat;
+  final double lng;
+  final String type;
+  final String osmId;
 
-  factory HeatmapCellModel.fromJson(Map<String, dynamic> json) {
-    return HeatmapCellModel(
-      geohash: (json['geohash'] ?? '').toString(),
-      centerLat: _toDouble(json['centerLat']) ?? 0,
-      centerLng: _toDouble(json['centerLng']) ?? 0,
-      safetyScore: _toDouble(json['safetyScore']),
-      reportCounts: _toIntMap(json['reportCounts']),
-      publicDataCounts: _toIntMap(json['publicDataCounts']),
-      totalDataPoints: _toInt(json['totalDataPoints']) ?? 0,
+  factory PublicDataPoint.fromJson(Map<String, dynamic> json) {
+    return PublicDataPoint(
+      lat: _toDouble(json['lat']) ?? 0,
+      lng: _toDouble(json['lng']) ?? 0,
+      type: (json['type'] ?? '').toString(),
+      osmId: (json['osmId'] ?? '').toString(),
     );
   }
 }
@@ -148,24 +139,6 @@ class CommunityReportItem {
   }
 }
 
-Map<String, int> _toIntMap(dynamic value) {
-  if (value is! Map) return const {};
-  final result = <String, int>{};
-  for (final entry in value.entries) {
-    final parsed = _toInt(entry.value);
-    if (parsed != null) {
-      result[entry.key.toString()] = parsed;
-    }
-  }
-  return result;
-}
-
-int? _toInt(dynamic value) {
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  if (value is String) return int.tryParse(value);
-  return null;
-}
 
 double? _toDouble(dynamic value) {
   if (value is double) return value;
