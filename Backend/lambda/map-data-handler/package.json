@@ -1,7 +1,7 @@
 {
-  "name": "heatmap-handler",
+  "name": "map-data-handler",
   "version": "1.0.0",
-  "description": "Lambda function for SafeWalk heatmap data analysis",
+  "description": "Lambda function for SafeWalk public map data and user reports",
   "main": "index.js",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.709.0",

@@ -17,6 +17,7 @@ export interface ApiStackProps extends cdk.StackProps {
   heatmapHandler?: lambda.IFunction;
   liveLocationHandler?: lambda.IFunction;
   tipsHandler: lambda.IFunction;
+  mapDataHandler?: lambda.IFunction;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -34,6 +35,7 @@ export class ApiStack extends cdk.Stack {
       heatmapHandler,
       liveLocationHandler,
       tipsHandler,
+      mapDataHandler,
     } = props;
 
     const httpApi = new apigateway.HttpApi(this, 'safewalk-app-api', {
@@ -293,43 +295,6 @@ export class ApiStack extends cdk.Stack {
       });
     }
 
-    /* Heatmap routes */
-
-    if (heatmapHandler) {
-      const heatmapLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
-        'heatmap-integration',
-        heatmapHandler,
-      );
-
-      httpApi.addRoutes({
-        path: '/heatmap',
-        methods: [apigateway.HttpMethod.GET],
-        integration: heatmapLambdaIntegration,
-        authorizer: jwtAuthorizer,
-      });
-
-      httpApi.addRoutes({
-        path: '/heatmap/reports',
-        methods: [apigateway.HttpMethod.POST],
-        integration: heatmapLambdaIntegration,
-        authorizer: jwtAuthorizer,
-      });
-
-      httpApi.addRoutes({
-        path: '/heatmap/reports',
-        methods: [apigateway.HttpMethod.GET],
-        integration: heatmapLambdaIntegration,
-        authorizer: jwtAuthorizer,
-      });
-
-      httpApi.addRoutes({
-        path: '/heatmap/reports/{reportId}',
-        methods: [apigateway.HttpMethod.DELETE],
-        integration: heatmapLambdaIntegration,
-        authorizer: jwtAuthorizer,
-      });
-    }
-
     /* Live location routes */
 
     if (liveLocationHandler) {
@@ -373,7 +338,37 @@ export class ApiStack extends cdk.Stack {
       integration: tipsLambdaIntegration,
       authorizer: jwtAuthorizer,
     });
+/* Map data routes */
 
+    if (mapDataHandler) {
+      const mapDataLambdaIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'map-data-integration',
+        mapDataHandler,
+      );
+
+      httpApi.addRoutes({
+        path: '/map-data',
+        methods: [apigateway.HttpMethod.GET],
+        integration: mapDataLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/map-data/reports',
+        methods: [apigateway.HttpMethod.POST],
+        integration: mapDataLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+
+      httpApi.addRoutes({
+        path: '/map-data/reports/{reportId}',
+        methods: [apigateway.HttpMethod.DELETE],
+        integration: mapDataLambdaIntegration,
+        authorizer: jwtAuthorizer,
+      });
+    }
+
+    
     new cdk.CfnOutput(this, 'api-url', {
       value: httpApi.apiEndpoint,
       description: 'HTTP API Gateway endpoint URL',

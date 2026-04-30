@@ -4,9 +4,9 @@ import { AuthStack } from '../lib/auth-stack';
 import { UserStack } from '../lib/user-stack';
 import { NotificationStack } from '../lib/notification-stack';
 import { SosStack } from '../lib/sos-stack';
-import { HeatmapStack } from '../lib/heatmap-stack';
 import { TipsStack } from '../lib/tips-stack';
 import { LiveLocationStack } from '../lib/live-location-stack';
+import { MapDataStack } from '../lib/map-data-stack';
 import { ApiStack } from '../lib/api-stack';
 
 const app = new cdk.App();
@@ -36,12 +36,12 @@ const sosStack = new SosStack(app, 'safewalk-app-sos-stack', {
   pushNotificationTopic: notificationStack.pushNotificationTopic,
   deviceTokensTable: notificationStack.deviceTokensTable,
 });
-const heatmapStack = new HeatmapStack(app, 'safewalk-app-heatmap-stack', { env });
 const liveLocationStack = new LiveLocationStack(app, 'safewalk-app-live-location-stack', {
   env,
   appUsersTable: userStack.appUsersTable,
 });
 const tipsStack = new TipsStack(app, 'safewalk-app-tips-stack', { env });
+const mapDataStack = new MapDataStack(app, 'safewalk-app-map-data-stack', { env });
 new ApiStack(app, 'safewalk-app-api-stack', {
   env,
   userPool: authStack.userPool,
@@ -51,7 +51,7 @@ new ApiStack(app, 'safewalk-app-api-stack', {
   platformRegistrationHandler: userStack.platformRegistrationHandler,
   notificationHandler: notificationStack.notificationHandler,
   sosHandler: sosStack.sosHandler,
-  heatmapHandler: heatmapStack.heatmapHandler,
   liveLocationHandler: liveLocationStack.liveLocationHandler,
   tipsHandler: tipsStack.tipsHandler,
+  mapDataHandler: mapDataStack.mapDataHandler,
 });
