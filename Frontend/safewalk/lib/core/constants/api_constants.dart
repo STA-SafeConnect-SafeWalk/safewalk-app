@@ -70,15 +70,11 @@ class ApiConstants {
   /// POST – Trigger a new SOS alarm.
   static const String sos = '/sos';
 
-  /// GET – Query heatmap cells for a map area.
-  static const String heatmap = '/heatmap';
+  /// GET – Retrieve public map data (POIs + user reports) around a coordinate.
+  static const String mapData = '/map-data';
 
-  /// GET – Retrieve metadata for report categories and public-data layers.
-  static const String heatmapMetadata = '/heatmap/metadata';
-
-  /// POST – Submit a map safety report.
-  /// GET  – List own map reports.
-  static const String heatmapReports = '/heatmap/reports';
+  /// POST – Submit a user-generated map report.
+  static const String mapReports = '/map-data/reports';
 
   /// Returns the path for a specific contact: /contacts/{contactId}
   static String contactById(String contactId) => '/contacts/$contactId';
@@ -89,9 +85,9 @@ class ApiConstants {
   /// Returns the path to immediately propagate a pending SOS: /sos/{sosId}/propagate
   static String sosPropagate(String sosId) => '/sos/$sosId/propagate';
 
-  /// Returns the path for a specific map report: /heatmap/reports/{reportId}
-  static String heatmapReportById(String reportId) =>
-      '/heatmap/reports/$reportId';
+  /// Returns the path for a specific map report: /map-data/reports/{reportId}
+  static String mapReportById(String reportId) =>
+      '/map-data/reports/$reportId';
 
   // ---------------------------------------------------------------------------
   // Live location endpoints (JWT required)

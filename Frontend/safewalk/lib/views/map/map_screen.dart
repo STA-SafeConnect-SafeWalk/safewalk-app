@@ -28,17 +28,12 @@ _LayerVisualStyle _layerVisualStyle(String layerKey) {
         icon: Icons.light_mode_rounded,
         color: Color(0xFFE0AA00),
       );
-    case 'LIT_WAY':
-      return const _LayerVisualStyle(
-        icon: Icons.route_rounded,
-        color: Color(0xFF12A150),
-      );
     case 'UNLIT_WAY':
       return const _LayerVisualStyle(
         icon: Icons.nights_stay_rounded,
         color: Color(0xFFE11D48),
       );
-    case 'POLICE_STATION':
+    case 'POLICE':
       return const _LayerVisualStyle(
         icon: Icons.local_police_rounded,
         color: Color(0xFF2563EB),
@@ -47,6 +42,21 @@ _LayerVisualStyle _layerVisualStyle(String layerKey) {
       return const _LayerVisualStyle(
         icon: Icons.local_hospital_rounded,
         color: Color(0xFFDB2777),
+      );
+    case 'CLINIC':
+      return const _LayerVisualStyle(
+        icon: Icons.medical_services_rounded,
+        color: Color(0xFFEC4899),
+      );
+    case 'PHARMACY':
+      return const _LayerVisualStyle(
+        icon: Icons.local_pharmacy_rounded,
+        color: Color(0xFF16A34A),
+      );
+    case 'FIRE_STATION':
+      return const _LayerVisualStyle(
+        icon: Icons.local_fire_department_rounded,
+        color: Color(0xFFEA580C),
       );
     case 'EMERGENCY_PHONE':
       return const _LayerVisualStyle(
@@ -80,7 +90,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _cameraUpdatesEnabled = false;
   bool _initialCameraSynced = false;
 
-  List<HeatmapLayerEntry>? _lastRenderedEntries;
+  List<MapLayerEntry>? _lastRenderedEntries;
   List<CommunityReportItem>? _lastRenderedCommunityReports;
   LatLng? _lastReportTapLocation;
   LatLng? _lastSearchLocation;
@@ -137,14 +147,13 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  bool _listEquals(List<HeatmapLayerEntry>? a, List<HeatmapLayerEntry>? b) {
+  bool _listEquals(List<MapLayerEntry>? a, List<MapLayerEntry>? b) {
     if (identical(a, b)) return true;
     if (a == null || b == null || a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i].lat != b[i].lat ||
           a[i].lng != b[i].lng ||
-          a[i].layerKey != b[i].layerKey ||
-          a[i].count != b[i].count) {
+          a[i].layerKey != b[i].layerKey) {
         return false;
       }
     }
@@ -449,9 +458,9 @@ class _MapScreenState extends State<MapScreen> {
 
     final vm = context.read<MapViewModel>();
     final categoryLabel = vm.reportCategories
-        .where((c) => c.key == report.category)
+        .where((c) => c.key == report.type)
         .map((c) => c.label)
-        .firstOrNull ?? report.category;
+        .firstOrNull ?? report.type;
 
     showModalBottomSheet<void>(
       context: context,
@@ -485,11 +494,11 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            if (report.description != null &&
-                report.description!.isNotEmpty) ...[
+            if (report.comment != null &&
+                report.comment!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                report.description!,
+                report.comment!,
                 style: const TextStyle(
                   fontSize: 15,
                   color: Color(0xFF475569),
@@ -557,7 +566,6 @@ class _MapScreenState extends State<MapScreen> {
           image: iconsByLayerKey[entry.layerKey]!,
           iconAnchor: IconAnchor.BOTTOM,
           iconSize: 1,
-          symbolSortKey: entry.count.toDouble(),
         ),
       );
     }
@@ -909,8 +917,8 @@ class _MapScreenState extends State<MapScreen> {
           const SizedBox(width: 8),
           IconButton(
             tooltip: 'Daten aktualisieren',
-            onPressed: vm.isLoadingHeatmap ? null : _refreshData,
-            icon: vm.isLoadingHeatmap
+            onPressed: vm.isLoadingMapData ? null : _refreshData,
+            icon: vm.isLoadingMapData
                 ? const SizedBox(
                     width: 18,
                     height: 18,
@@ -957,7 +965,7 @@ class _MapScreenState extends State<MapScreen> {
       camera.zoom,
       viewportBounds: viewportBounds,
     );
-    vm.loadHeatmap(force: true);
+    vm.loadMapData(force: true);
   }
 
   Future<void> _openLayerSheet() async {
@@ -1168,10 +1176,10 @@ class _LayerSelectionSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: vm.isLoadingHeatmap ? null : onRefresh,
+              onPressed: vm.isLoadingMapData ? null : onRefresh,
               icon: const Icon(Icons.refresh),
               label: Text(
-                vm.isLoadingHeatmap
+                vm.isLoadingMapData
                     ? 'Aktualisieren...'
                     : 'Daten aktualisieren',
               ),
@@ -1374,7 +1382,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                   : () async {
                       final ok = await vm.submitReport(
                         categoryKey: _selectedCategory,
-                        description: _descriptionController.text,
+                        comment: _descriptionController.text,
                       );
                       if (!context.mounted) return;
                       if (ok) {

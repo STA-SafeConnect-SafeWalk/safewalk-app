@@ -1,81 +1,58 @@
-class HeatmapLayerMetadata {
-  const HeatmapLayerMetadata({
+class MapLayerMetadata {
+  const MapLayerMetadata({
     required this.key,
     required this.label,
-    required this.weight,
     required this.iconKey,
     this.isSelected = false,
   });
 
   final String key;
   final String label;
-  final double weight;
   final String iconKey;
   final bool isSelected;
 
-  HeatmapLayerMetadata copyWith({bool? isSelected}) {
-    return HeatmapLayerMetadata(
+  MapLayerMetadata copyWith({bool? isSelected}) {
+    return MapLayerMetadata(
       key: key,
       label: label,
-      weight: weight,
       iconKey: iconKey,
       isSelected: isSelected ?? this.isSelected,
     );
   }
-
-  factory HeatmapLayerMetadata.fromJson(
-    Map<String, dynamic> json, {
-    bool isSelected = false,
-  }) {
-    return HeatmapLayerMetadata(
-      key: (json['key'] ?? '').toString(),
-      label: (json['label'] ?? '').toString(),
-      weight: _toDouble(json['weight']) ?? 0,
-      iconKey: (json['iconKey'] ?? '').toString(),
-      isSelected: isSelected,
-    );
-  }
 }
 
-class HeatmapReportCategoryMetadata {
-  const HeatmapReportCategoryMetadata({
-    required this.key,
-    required this.label,
-    required this.weight,
-  });
+class MapReportCategoryMetadata {
+  const MapReportCategoryMetadata({required this.key, required this.label});
 
   final String key;
   final String label;
-  final double weight;
-
-  factory HeatmapReportCategoryMetadata.fromJson(Map<String, dynamic> json) {
-    return HeatmapReportCategoryMetadata(
-      key: (json['key'] ?? '').toString(),
-      label: (json['label'] ?? '').toString(),
-      weight: _toDouble(json['weight']) ?? 0,
-    );
-  }
 }
 
 class PublicDataPoint {
   const PublicDataPoint({
+    required this.id,
+    required this.category,
     required this.lat,
     required this.lng,
-    required this.type,
-    required this.osmId,
+    this.name,
   });
 
+  /// OSM identifier in the form `<type>/<id>` (e.g. `node/123`).
+  final String id;
+
+  /// Backend category, e.g. `HOSPITAL`, `POLICE`, `STREET_LAMP`, `UNLIT_WAY`.
+  final String category;
   final double lat;
   final double lng;
-  final String type;
-  final String osmId;
+  final String? name;
 
   factory PublicDataPoint.fromJson(Map<String, dynamic> json) {
     return PublicDataPoint(
+      id: (json['id'] ?? '').toString(),
+      category: (json['category'] ?? '').toString(),
       lat: _toDouble(json['lat']) ?? 0,
       lng: _toDouble(json['lng']) ?? 0,
-      type: (json['type'] ?? '').toString(),
-      osmId: (json['osmId'] ?? '').toString(),
+      name: json['name'] is String ? json['name'] as String : null,
     );
   }
 }
@@ -94,51 +71,53 @@ class MapPlaceSuggestion {
   final double lng;
 }
 
-class HeatmapLayerEntry {
-  const HeatmapLayerEntry({
+class MapLayerEntry {
+  const MapLayerEntry({
     required this.layerKey,
     required this.layerLabel,
     required this.lat,
     required this.lng,
-    required this.count,
   });
 
   final String layerKey;
   final String layerLabel;
   final double lat;
   final double lng;
-  final int count;
 }
 
 class CommunityReportItem {
   const CommunityReportItem({
     required this.reportId,
-    required this.category,
+    required this.type,
     required this.lat,
     required this.lng,
-    this.description,
+    this.comment,
     this.createdAt,
   });
 
   final String reportId;
-  final String category;
+
+  /// Backend report type, e.g. `UNLIT_WAY`, `WELL_LIT_WAY`, `UNSAFE_AREA`,
+  /// `HIGH_FOOT_TRAFFIC`, `LOW_FOOT_TRAFFIC`, `CRIME_INCIDENT`.
+  final String type;
   final double lat;
   final double lng;
-  final String? description;
+  final String? comment;
   final String? createdAt;
 
   factory CommunityReportItem.fromJson(Map<String, dynamic> json) {
     return CommunityReportItem(
       reportId: (json['reportId'] ?? '').toString(),
-      category: (json['category'] ?? '').toString(),
+      type: (json['type'] ?? '').toString(),
       lat: _toDouble(json['lat']) ?? 0,
       lng: _toDouble(json['lng']) ?? 0,
-      description: json['description'] as String?,
-      createdAt: json['createdAt'] as String?,
+      comment: json['comment'] is String ? json['comment'] as String : null,
+      createdAt: json['createdAt'] is String
+          ? json['createdAt'] as String
+          : null,
     );
   }
 }
-
 
 double? _toDouble(dynamic value) {
   if (value is double) return value;
