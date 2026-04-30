@@ -10,7 +10,7 @@ class ApiConstants {
       'https://r7fu37l4m5.execute-api.eu-central-1.amazonaws.com';
 
   /// Default timeout duration for HTTP requests.
-  static const Duration defaultTimeout = Duration(seconds: 15);
+  static const Duration defaultTimeout = Duration(seconds: 30);
 
   // ---------------------------------------------------------------------------
   // Auth endpoints (public – no JWT required)
@@ -70,6 +70,16 @@ class ApiConstants {
   /// POST – Trigger a new SOS alarm.
   static const String sos = '/sos';
 
+  /// GET – Query heatmap cells for a map area.
+  static const String heatmap = '/heatmap';
+
+  /// GET – Retrieve metadata for report categories and public-data layers.
+  static const String heatmapMetadata = '/heatmap/metadata';
+
+  /// POST – Submit a map safety report.
+  /// GET  – List own map reports.
+  static const String heatmapReports = '/heatmap/reports';
+
   /// Returns the path for a specific contact: /contacts/{contactId}
   static String contactById(String contactId) => '/contacts/$contactId';
 
@@ -78,6 +88,10 @@ class ApiConstants {
 
   /// Returns the path to immediately propagate a pending SOS: /sos/{sosId}/propagate
   static String sosPropagate(String sosId) => '/sos/$sosId/propagate';
+
+  /// Returns the path for a specific map report: /heatmap/reports/{reportId}
+  static String heatmapReportById(String reportId) =>
+      '/heatmap/reports/$reportId';
 
   // ---------------------------------------------------------------------------
   // Live location endpoints (JWT required)

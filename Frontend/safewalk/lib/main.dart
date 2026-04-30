@@ -49,7 +49,9 @@ void main() {
         ChangeNotifierProvider(
           create: (_) => HomeViewModel(apiService: apiService),
         ),
-        ChangeNotifierProvider(create: (_) => MapViewModel()),
+        ChangeNotifierProvider(
+          create: (_) => MapViewModel(apiService: apiService),
+        ),
         ChangeNotifierProvider(
           create: (_) => ContactsViewModel(apiService: apiService),
         ),

@@ -37,16 +37,11 @@ class PushNotificationService {
       final firebaseOptions = DefaultFirebaseOptions.currentPlatform;
 
       if (Firebase.apps.isEmpty) {
-        if (!_hasValidFirebaseOptions(firebaseOptions)) {
-          debugPrint(
-            '[Push] Firebase options are missing/invalid. '
-            'Skipping push initialisation. Provide --dart-define values '
-            'or configure Firebase via GoogleService-Info.plist.',
-          );
-          return false;
+        if (_hasValidFirebaseOptions(firebaseOptions)) {
+          await Firebase.initializeApp(options: firebaseOptions);
+        } else {
+          await Firebase.initializeApp();
         }
-
-        await Firebase.initializeApp(options: firebaseOptions);
       }
       _messaging = FirebaseMessaging.instance;
 

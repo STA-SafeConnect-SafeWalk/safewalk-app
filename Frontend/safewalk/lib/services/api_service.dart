@@ -12,7 +12,9 @@
 //     refresh using the stored refreshToken.
 
 import 'dart:async';
+import 'dart:developer' as developer;
 
+import 'package:http/http.dart' as http;
 import 'package:safewalk/core/constants/api_constants.dart';
 import 'package:safewalk/core/network/api_client.dart';
 import 'package:safewalk/core/network/api_result.dart';
@@ -23,6 +25,7 @@ class ApiService {
   late final AuthService _authService;
 
   Completer<bool>? _refreshCompleter;
+  http.Client? _heatmapClient;
 
   ApiService({ApiClient? client, AuthService? authService}) {
     _client =
@@ -332,6 +335,109 @@ class ApiService {
     return _authenticatedRequest(() => _client.get(ApiConstants.tips));
   }
 
+  /// Retrieves map metadata such as available report categories and layer types.
+  Future<ApiResult> getHeatmapMetadata() async {
+    return _authenticatedRequest(
+      () => _client.get(ApiConstants.heatmapMetadata),
+    );
+  }
+
+  /// Queries heatmap cells around a center point.
+  Future<ApiResult> getHeatmap({
+    required double lat,
+    required double lng,
+    double? radiusKm,
+    bool cancelPrevious = false,
+  }) async {
+    final query = <String, dynamic>{'lat': lat, 'lng': lng};
+    if (radiusKm != null) {
+      query['radiusKm'] = radiusKm;
+    }
+
+    assert(() {
+      developer.log(
+        'HEATMAP GET query: ${Uri(path: ApiConstants.heatmap, queryParameters: query.map((key, value) => MapEntry(key, value.toString())))}',
+        name: 'SafeWalk.ApiService',
+      );
+      return true;
+    }());
+
+    if (cancelPrevious) {
+      assert(() {
+        developer.log(
+          'HEATMAP GET cancelPrevious=true, closing previous in-flight client if present.',
+          name: 'SafeWalk.ApiService',
+        );
+        return true;
+      }());
+      _heatmapClient?.close();
+      _heatmapClient = null;
+    }
+
+    final client = http.Client();
+    _heatmapClient = client;
+
+    try {
+      final result = await _authenticatedRequest(
+        () => _client.get(
+          ApiConstants.heatmap,
+          queryParameters: query,
+          client: client,
+        ),
+      );
+
+      assert(() {
+        developer.log(
+          'HEATMAP GET result: status=${result.statusCode}, success=${result.isSuccess}',
+          name: 'SafeWalk.ApiService',
+        );
+        return true;
+      }());
+
+      return result;
+    } finally {
+      client.close();
+      if (identical(_heatmapClient, client)) {
+        _heatmapClient = null;
+      }
+    }
+  }
+
+  /// Submits a user safety report for the map heatmap.
+  Future<ApiResult> submitHeatmapReport({
+    required double lat,
+    required double lng,
+    required String category,
+    String? description,
+  }) async {
+    return _authenticatedRequest(
+      () => _client.post(
+        ApiConstants.heatmapReports,
+        body: {
+          'lat': lat,
+          'lng': lng,
+          'category': category,
+          if (description != null && description.trim().isNotEmpty)
+            'description': description.trim(),
+        },
+      ),
+    );
+  }
+
+  /// Lists reports created by the currently authenticated user.
+  Future<ApiResult> getOwnHeatmapReports() async {
+    return _authenticatedRequest(
+      () => _client.get(ApiConstants.heatmapReports),
+    );
+  }
+
+  /// Deletes one of the authenticated user's own map reports.
+  Future<ApiResult> deleteHeatmapReport(String reportId) async {
+    return _authenticatedRequest(
+      () => _client.delete(ApiConstants.heatmapReportById(reportId)),
+    );
+  }
+
   /// Updates sharing settings for a specific contact.
   Future<ApiResult> updateContactSettings(
     String contactId, {
@@ -428,9 +534,7 @@ class ApiService {
   }
 
   Future<ApiResult> stopLiveLocation() async {
-    return _authenticatedRequest(
-      () => _client.delete(ApiConstants.location),
-    );
+    return _authenticatedRequest(() => _client.delete(ApiConstants.location));
   }
 
   // ===========================================================================

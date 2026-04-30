@@ -29,7 +29,9 @@ void main() {
           ChangeNotifierProvider(
             create: (_) => HomeViewModel(apiService: apiService),
           ),
-          ChangeNotifierProvider(create: (_) => MapViewModel()),
+          ChangeNotifierProvider(
+            create: (_) => MapViewModel(apiService: apiService),
+          ),
           ChangeNotifierProvider(
             create: (_) => ContactsViewModel(apiService: apiService),
           ),
@@ -39,7 +41,9 @@ void main() {
               headphoneService: HeadphoneService(),
             ),
           ),
-          ChangeNotifierProvider(create: (_) => SettingsViewModel()),
+          ChangeNotifierProvider(
+            create: (_) => SettingsViewModel(apiService: apiService),
+          ),
         ],
         child: const SafeWalkApp(),
       ),
