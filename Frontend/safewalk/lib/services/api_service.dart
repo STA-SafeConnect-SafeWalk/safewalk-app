@@ -25,7 +25,7 @@ class ApiService {
   late final AuthService _authService;
 
   Completer<bool>? _refreshCompleter;
-  http.Client? _heatmapClient;
+  http.Client? _mapDataClient;
 
   ApiService({ApiClient? client, AuthService? authService}) {
     _client =
@@ -335,52 +335,43 @@ class ApiService {
     return _authenticatedRequest(() => _client.get(ApiConstants.tips));
   }
 
-  /// Retrieves map metadata such as available report categories and layer types.
-  Future<ApiResult> getHeatmapMetadata() async {
-    return _authenticatedRequest(
-      () => _client.get(ApiConstants.heatmapMetadata),
-    );
-  }
-
-  /// Queries heatmap cells around a center point.
-  Future<ApiResult> getHeatmap({
+  /// Retrieves public map data (POIs from OSM + user-generated reports) for
+  /// a circular area around the given coordinate.
+  ///
+  /// [radiusMeters] must be between 50 and 5000 meters as enforced by the
+  /// backend.
+  Future<ApiResult> getMapData({
     required double lat,
     required double lng,
-    double? radiusKm,
+    required double radiusMeters,
     bool cancelPrevious = false,
   }) async {
-    final query = <String, dynamic>{'lat': lat, 'lng': lng};
-    if (radiusKm != null) {
-      query['radiusKm'] = radiusKm;
-    }
+    final query = <String, dynamic>{
+      'lat': lat,
+      'lng': lng,
+      'radius': radiusMeters,
+    };
 
     assert(() {
       developer.log(
-        'HEATMAP GET query: ${Uri(path: ApiConstants.heatmap, queryParameters: query.map((key, value) => MapEntry(key, value.toString())))}',
+        'MAP-DATA GET query: ${Uri(path: ApiConstants.mapData, queryParameters: query.map((key, value) => MapEntry(key, value.toString())))}',
         name: 'SafeWalk.ApiService',
       );
       return true;
     }());
 
     if (cancelPrevious) {
-      assert(() {
-        developer.log(
-          'HEATMAP GET cancelPrevious=true, closing previous in-flight client if present.',
-          name: 'SafeWalk.ApiService',
-        );
-        return true;
-      }());
-      _heatmapClient?.close();
-      _heatmapClient = null;
+      _mapDataClient?.close();
+      _mapDataClient = null;
     }
 
     final client = http.Client();
-    _heatmapClient = client;
+    _mapDataClient = client;
 
     try {
       final result = await _authenticatedRequest(
         () => _client.get(
-          ApiConstants.heatmap,
+          ApiConstants.mapData,
           queryParameters: query,
           client: client,
         ),
@@ -388,7 +379,7 @@ class ApiService {
 
       assert(() {
         developer.log(
-          'HEATMAP GET result: status=${result.statusCode}, success=${result.isSuccess}',
+          'MAP-DATA GET result: status=${result.statusCode}, success=${result.isSuccess}',
           name: 'SafeWalk.ApiService',
         );
         return true;
@@ -397,44 +388,47 @@ class ApiService {
       return result;
     } finally {
       client.close();
-      if (identical(_heatmapClient, client)) {
-        _heatmapClient = null;
+      if (identical(_mapDataClient, client)) {
+        _mapDataClient = null;
       }
     }
   }
 
-  /// Submits a user safety report for the map heatmap.
-  Future<ApiResult> submitHeatmapReport({
+  /// Submits a user-generated map report.
+  Future<ApiResult> submitMapReport({
     required double lat,
     required double lng,
-    required String category,
-    String? description,
+    required String type,
+    String? comment,
   }) async {
     return _authenticatedRequest(
       () => _client.post(
-        ApiConstants.heatmapReports,
+        ApiConstants.mapReports,
         body: {
           'lat': lat,
           'lng': lng,
-          'category': category,
-          if (description != null && description.trim().isNotEmpty)
-            'description': description.trim(),
+          'type': type,
+          if (comment != null && comment.trim().isNotEmpty)
+            'comment': comment.trim(),
         },
       ),
     );
   }
 
-  /// Lists reports created by the currently authenticated user.
-  Future<ApiResult> getOwnHeatmapReports() async {
-    return _authenticatedRequest(
-      () => _client.get(ApiConstants.heatmapReports),
-    );
-  }
-
   /// Deletes one of the authenticated user's own map reports.
-  Future<ApiResult> deleteHeatmapReport(String reportId) async {
+  ///
+  /// The backend requires the original [lat]/[lng] of the report to locate it
+  /// in its geo-bucketed storage.
+  Future<ApiResult> deleteMapReport({
+    required String reportId,
+    required double lat,
+    required double lng,
+  }) async {
     return _authenticatedRequest(
-      () => _client.delete(ApiConstants.heatmapReportById(reportId)),
+      () => _client.delete(
+        ApiConstants.mapReportById(reportId),
+        queryParameters: {'lat': lat, 'lng': lng},
+      ),
     );
   }
 

@@ -48,84 +48,81 @@ class MapViewModel extends ChangeNotifier {
   static const _defaultZoom = 13.0;
   static const _searchDebounce = Duration(milliseconds: 350);
 
-  static const _defaultSelectedLayerKeys = <String>{'STREET_LAMP', 'LIT_WAY'};
+  /// Backend constraints (see `map-data-handler`).
+  static const _minRadiusMeters = 50.0;
+  static const _maxRadiusMeters = 5000.0;
 
-  static const _fallbackPublicLayers = <HeatmapLayerMetadata>[
-    HeatmapLayerMetadata(
+  /// Layers selected by default when the screen opens.
+  static const _defaultSelectedLayerKeys = <String>{'STREET_LAMP', 'UNLIT_WAY'};
+
+  /// Public-data layer catalogue. Keys must match the `category` values
+  /// returned by the backend `GET /map-data` endpoint.
+  static const _availablePublicLayers = <MapLayerMetadata>[
+    MapLayerMetadata(
       key: 'STREET_LAMP',
       label: 'Strassenlaternen',
-      weight: 0.5,
       iconKey: 'street_lamp',
     ),
-    HeatmapLayerMetadata(
-      key: 'LIT_WAY',
-      label: 'Beleuchtete Wege',
-      weight: 0.3,
-      iconKey: 'lit_way',
-    ),
-    HeatmapLayerMetadata(
+    MapLayerMetadata(
       key: 'UNLIT_WAY',
       label: 'Unbeleuchtete Wege',
-      weight: -0.5,
       iconKey: 'unlit_way',
     ),
-    HeatmapLayerMetadata(
-      key: 'POLICE_STATION',
+    MapLayerMetadata(
+      key: 'POLICE',
       label: 'Polizeistationen',
-      weight: 1,
-      iconKey: 'police_station',
+      iconKey: 'police',
     ),
-    HeatmapLayerMetadata(
+    MapLayerMetadata(
       key: 'HOSPITAL',
       label: 'Krankenhäuser',
-      weight: 0.5,
       iconKey: 'hospital',
     ),
-    HeatmapLayerMetadata(
+    MapLayerMetadata(
+      key: 'CLINIC',
+      label: 'Kliniken',
+      iconKey: 'clinic',
+    ),
+    MapLayerMetadata(
+      key: 'PHARMACY',
+      label: 'Apotheken',
+      iconKey: 'pharmacy',
+    ),
+    MapLayerMetadata(
+      key: 'FIRE_STATION',
+      label: 'Feuerwehr',
+      iconKey: 'fire_station',
+    ),
+    MapLayerMetadata(
       key: 'EMERGENCY_PHONE',
       label: 'Notruftelefone',
-      weight: 0.5,
       iconKey: 'emergency_phone',
     ),
   ];
 
-  static const _fallbackReportCategories = <HeatmapReportCategoryMetadata>[
-    HeatmapReportCategoryMetadata(
-      key: 'UNSAFE_AREA',
-      label: 'Unsicherer Bereich',
-      weight: -2,
-    ),
-    HeatmapReportCategoryMetadata(
-      key: 'WELL_LIT',
-      label: 'Gut beleuchtet',
-      weight: 1,
-    ),
-    HeatmapReportCategoryMetadata(
-      key: 'POORLY_LIT',
-      label: 'Schlecht beleuchtet',
-      weight: -1,
-    ),
-    HeatmapReportCategoryMetadata(
+  /// User-report categories. Keys must match the `type` values accepted by
+  /// the backend `POST /map-data/reports` endpoint.
+  static const _availableReportCategories = <MapReportCategoryMetadata>[
+    MapReportCategoryMetadata(key: 'UNSAFE_AREA', label: 'Unsicherer Bereich'),
+    MapReportCategoryMetadata(key: 'WELL_LIT_WAY', label: 'Gut beleuchtet'),
+    MapReportCategoryMetadata(key: 'UNLIT_WAY', label: 'Schlecht beleuchtet'),
+    MapReportCategoryMetadata(
       key: 'HIGH_FOOT_TRAFFIC',
       label: 'Hohe Personenfrequenz',
-      weight: 1,
     ),
-    HeatmapReportCategoryMetadata(
+    MapReportCategoryMetadata(
       key: 'LOW_FOOT_TRAFFIC',
       label: 'Geringe Personenfrequenz',
-      weight: -1,
     ),
-    HeatmapReportCategoryMetadata(
+    MapReportCategoryMetadata(
       key: 'CRIME_INCIDENT',
       label: 'Kriminalitätsvorfall',
-      weight: -3,
     ),
   ];
 
   bool _initialized = false;
   bool _isInitializing = false;
-  bool _isLoadingMetadata = false;
-  bool _isLoadingHeatmap = false;
+  bool _isLoadingMapData = false;
   bool _isSearchingPlaces = false;
   bool _isSubmittingReport = false;
   bool _isFetchingLocation = false;
@@ -135,8 +132,6 @@ class MapViewModel extends ChangeNotifier {
 
   LatLng _mapCenter = _defaultCenter;
   double _zoom = _defaultZoom;
-  double _radiusKm = 2;
-  double _maxRadiusKm = 10;
 
   LatLng? _userLocation;
   LatLng? _selectedSearchLocation;
@@ -147,8 +142,9 @@ class MapViewModel extends ChangeNotifier {
   String _searchQuery = '';
   List<MapPlaceSuggestion> _searchSuggestions = const [];
 
-  List<HeatmapLayerMetadata> _publicDataLayers = const [];
-  List<HeatmapReportCategoryMetadata> _reportCategories = const [];
+  List<MapLayerMetadata> _publicDataLayers = const [];
+  final List<MapReportCategoryMetadata> _reportCategories =
+      List.unmodifiable(_availableReportCategories);
   List<PublicDataPoint> _publicDataPoints = const [];
 
   String? _selectedReportCategoryKey;
@@ -160,13 +156,12 @@ class MapViewModel extends ChangeNotifier {
 
   Timer? _searchTimer;
 
-  int _activeHeatmapRequestId = 0;
+  int _activeMapDataRequestId = 0;
   int _renderGeneration = 0;
 
   bool get isInitialized => _initialized;
   bool get isInitializing => _isInitializing;
-  bool get isLoadingMetadata => _isLoadingMetadata;
-  bool get isLoadingHeatmap => _isLoadingHeatmap;
+  bool get isLoadingMapData => _isLoadingMapData;
   bool get isSearchingPlaces => _isSearchingPlaces;
   bool get isSubmittingReport => _isSubmittingReport;
 
@@ -175,7 +170,6 @@ class MapViewModel extends ChangeNotifier {
 
   LatLng get mapCenter => _mapCenter;
   double get zoom => _zoom;
-  double get radiusKm => _radiusKm;
 
   LatLng? get userLocation => _userLocation;
   LatLng? get selectedSearchLocation => _selectedSearchLocation;
@@ -184,8 +178,8 @@ class MapViewModel extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   List<MapPlaceSuggestion> get searchSuggestions => _searchSuggestions;
 
-  List<HeatmapLayerMetadata> get publicDataLayers => _publicDataLayers;
-  List<HeatmapReportCategoryMetadata> get reportCategories => _reportCategories;
+  List<MapLayerMetadata> get publicDataLayers => _publicDataLayers;
+  List<MapReportCategoryMetadata> get reportCategories => _reportCategories;
   List<PublicDataPoint> get publicDataPoints => _publicDataPoints;
 
   bool get useCurrentLocationForReport => _useCurrentLocationForReport;
@@ -198,7 +192,7 @@ class MapViewModel extends ChangeNotifier {
   String get mapboxAccessToken => MapboxPlacesService.accessToken;
   String get mapboxStyleUri => MapboxPlacesService.styleUri;
 
-  List<HeatmapLayerMetadata> get selectedLayers => _publicDataLayers
+  List<MapLayerMetadata> get selectedLayers => _publicDataLayers
       .where((layer) => layer.isSelected)
       .toList(growable: false);
 
@@ -209,7 +203,7 @@ class MapViewModel extends ChangeNotifier {
     final selectedKeys = selected.map((item) => item.key).toSet();
     if (selected.length == 2 &&
         selectedKeys.contains('STREET_LAMP') &&
-        selectedKeys.contains('LIT_WAY')) {
+        selectedKeys.contains('UNLIT_WAY')) {
       return 'Lichtkarte';
     }
 
@@ -221,10 +215,7 @@ class MapViewModel extends ChangeNotifier {
   }
 
   String get activeViewSubtitle {
-    final total = visibleLayerEntries.fold<int>(
-      0,
-      (sum, item) => sum + item.count,
-    );
+    final total = visibleLayerEntries.length;
     if (total == 0) return 'Keine Einträge im aktuellen Ausschnitt verfügbar';
     return '$total Einträge im aktuellen Ausschnitt';
   }
@@ -236,13 +227,13 @@ class MapViewModel extends ChangeNotifier {
     }
 
     for (final point in _publicDataPoints) {
-      totals[point.type] = (totals[point.type] ?? 0) + 1;
+      totals[point.category] = (totals[point.category] ?? 0) + 1;
     }
 
     return totals;
   }
 
-  List<HeatmapLayerEntry> get visibleLayerEntries {
+  List<MapLayerEntry> get visibleLayerEntries {
     final selected = selectedLayers;
     if (selected.isEmpty || _publicDataPoints.isEmpty) return const [];
 
@@ -250,23 +241,20 @@ class MapViewModel extends ChangeNotifier {
       for (final layer in selected) layer.key: layer.label,
     };
 
-    final entries = <HeatmapLayerEntry>[];
-
+    final entries = <MapLayerEntry>[];
     for (final point in _publicDataPoints) {
-      final label = selectedKeys[point.type];
+      final label = selectedKeys[point.category];
       if (label == null) continue;
 
       entries.add(
-        HeatmapLayerEntry(
-          layerKey: point.type,
+        MapLayerEntry(
+          layerKey: point.category,
           layerLabel: label,
           lat: point.lat,
           lng: point.lng,
-          count: 1,
         ),
       );
     }
-
     return entries;
   }
 
@@ -275,16 +263,27 @@ class MapViewModel extends ChangeNotifier {
 
     _initialized = true;
     _isInitializing = true;
+
+    _publicDataLayers = _availablePublicLayers
+        .map(
+          (layer) => layer.copyWith(
+            isSelected: _defaultSelectedLayerKeys.contains(layer.key),
+          ),
+        )
+        .toList(growable: false);
+    _selectedReportCategoryKey ??= _reportCategories.isNotEmpty
+        ? _reportCategories.first.key
+        : null;
+
     notifyListeners();
 
-    await _loadMetadata();
     await _loadCurrentLocation();
 
     _isInitializing = false;
     notifyListeners();
   }
 
-  Future<void> loadHeatmap({
+  Future<void> loadMapData({
     LatLng? center,
     MapViewportBounds? viewportBounds,
     bool force = false,
@@ -300,33 +299,38 @@ class MapViewModel extends ChangeNotifier {
     final requestCenter = _mapCenter;
     final effectiveViewportBounds = viewportBounds ?? _lastViewportBounds;
 
-    final requestRadiusKm = _requiredViewportRadiusKm(
+    final requestRadiusMeters = _requiredViewportRadiusMeters(
       _zoom,
       center: requestCenter,
       viewportBounds: effectiveViewportBounds,
     );
 
-    if (requestRadiusKm > _maxRadiusKm) {
+    if (requestRadiusMeters > _maxRadiusMeters) {
       _errorMessage =
           'Kartenausschnitt zu gross. Bitte zoomen, um Daten zu laden.';
       notifyListeners();
       return;
     }
 
-    final requestId = ++_activeHeatmapRequestId;
+    final clampedRadius = requestRadiusMeters.clamp(
+      _minRadiusMeters,
+      _maxRadiusMeters,
+    );
 
-    _isLoadingHeatmap = true;
+    final requestId = ++_activeMapDataRequestId;
+
+    _isLoadingMapData = true;
     notifyListeners();
 
     try {
-      final result = await _apiService.getHeatmap(
+      final result = await _apiService.getMapData(
         lat: requestCenter.latitude,
         lng: requestCenter.longitude,
-        radiusKm: requestRadiusKm,
+        radiusMeters: clampedRadius,
         cancelPrevious: true,
       );
 
-      if (requestId != _activeHeatmapRequestId) {
+      if (requestId != _activeMapDataRequestId) {
         return;
       }
 
@@ -339,12 +343,13 @@ class MapViewModel extends ChangeNotifier {
       final data = payload['data'];
       if (data is! Map<String, dynamic>) {
         _publicDataPoints = const [];
+        _communityReports = const [];
         return;
       }
 
-      final rawPoints = data['publicDataPoints'];
-      if (rawPoints is List) {
-        _publicDataPoints = rawPoints
+      final rawPois = data['pois'];
+      if (rawPois is List) {
+        _publicDataPoints = rawPois
             .whereType<Map>()
             .map(
               (item) =>
@@ -367,21 +372,14 @@ class MapViewModel extends ChangeNotifier {
       } else {
         _communityReports = const [];
       }
-
-      final serverRadius = _toDouble(data['radiusKm']);
-      final effectiveRadius = serverRadius ?? requestRadiusKm;
-      if (effectiveRadius > _maxRadiusKm) {
-        _errorMessage =
-            'Kartenausschnitt zu gross. Bitte zoomen, um Daten zu laden.';
-      }
     } catch (e) {
-      if (requestId != _activeHeatmapRequestId) {
+      if (requestId != _activeMapDataRequestId) {
         return;
       }
-      _errorMessage = 'Heatmap-Daten konnten nicht geladen werden: $e';
+      _errorMessage = 'Karten-Daten konnten nicht geladen werden: $e';
     } finally {
-      if (requestId == _activeHeatmapRequestId) {
-        _isLoadingHeatmap = false;
+      if (requestId == _activeMapDataRequestId) {
+        _isLoadingMapData = false;
         notifyListeners();
       }
     }
@@ -399,35 +397,34 @@ class MapViewModel extends ChangeNotifier {
     }
   }
 
-  double _requiredViewportRadiusKm(
+  double _requiredViewportRadiusMeters(
     double zoom, {
     required LatLng center,
     MapViewportBounds? viewportBounds,
   }) {
     if (viewportBounds != null) {
-      var maxCornerDistanceKm = 0.0;
+      var maxCornerDistanceMeters = 0.0;
       for (final corner in viewportBounds.corners) {
-        final distance = _haversineKm(center, corner);
-        if (distance > maxCornerDistanceKm) {
-          maxCornerDistanceKm = distance;
+        final distance = _haversineMeters(center, corner);
+        if (distance > maxCornerDistanceMeters) {
+          maxCornerDistanceMeters = distance;
         }
       }
 
-      if (maxCornerDistanceKm > 0) {
-        return maxCornerDistanceKm;
+      if (maxCornerDistanceMeters > 0) {
+        return maxCornerDistanceMeters;
       }
     }
 
-    const earthCircumKm = 40075.0;
-    final kmPerPx = earthCircumKm / (256 * (1 << zoom.floor()));
+    // Fallback approximation when no viewport bounds are available yet.
+    const earthCircumMeters = 40075000.0;
+    final metersPerPx = earthCircumMeters / (256 * (1 << zoom.floor()));
     const fallbackScreenPx = 420.0;
-    final zoomBasedFallback = kmPerPx * fallbackScreenPx / 2;
-    final configuredFallback = _radiusKm > 0 ? _radiusKm : zoomBasedFallback;
-    return configuredFallback;
+    return metersPerPx * fallbackScreenPx / 2;
   }
 
-  static double _haversineKm(LatLng a, LatLng b) {
-    const r = 6371.0;
+  static double _haversineMeters(LatLng a, LatLng b) {
+    const r = 6371000.0;
     final dLat = (b.latitude - a.latitude) * math.pi / 180;
     final dLng = (b.longitude - a.longitude) * math.pi / 180;
     final aLat = a.latitude * math.pi / 180;
@@ -538,7 +535,7 @@ class MapViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> submitReport({String? categoryKey, String? description}) async {
+  Future<bool> submitReport({String? categoryKey, String? comment}) async {
     final selectedCategory = categoryKey ?? _selectedReportCategoryKey;
     if (selectedCategory == null || selectedCategory.isEmpty) {
       _errorMessage = 'Bitte waehle eine Kategorie aus.';
@@ -567,11 +564,11 @@ class MapViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _apiService.submitHeatmapReport(
+      final result = await _apiService.submitMapReport(
         lat: target.latitude,
         lng: target.longitude,
-        category: selectedCategory,
-        description: description,
+        type: selectedCategory,
+        comment: comment,
       );
 
       if (!result.isSuccess) {
@@ -588,6 +585,9 @@ class MapViewModel extends ChangeNotifier {
       _savedReportPinLocation = null;
       _isSubmittingReport = false;
       notifyListeners();
+
+      // Refresh map data so the new report appears immediately.
+      unawaited(loadMapData(force: true));
       return true;
     } catch (e) {
       _errorMessage = 'Meldung konnte nicht gesendet werden: $e';
@@ -617,105 +617,6 @@ class MapViewModel extends ChangeNotifier {
   void clearSuccess() {
     _successMessage = null;
     notifyListeners();
-  }
-
-  Future<void> _loadMetadata() async {
-    _isLoadingMetadata = true;
-    notifyListeners();
-
-    try {
-      final result = await _apiService.getHeatmapMetadata();
-
-      if (result.isSuccess && result.data is Map<String, dynamic>) {
-        final payload = result.data as Map<String, dynamic>;
-        final data = payload['data'];
-
-        if (data is Map<String, dynamic>) {
-          final categories = _parseReportCategories(data['reportCategories']);
-          final layers = _parsePublicLayers(data['publicDataLayers']);
-
-          if (categories.isNotEmpty) {
-            _reportCategories = categories;
-            _selectedReportCategoryKey ??= _reportCategories.first.key;
-          }
-
-          if (layers.isNotEmpty) {
-            _publicDataLayers = layers;
-          }
-
-          final defaults = data['defaults'];
-          if (defaults is Map<String, dynamic>) {
-            final radiusValue = _toDouble(defaults['radiusKm']);
-            if (radiusValue != null && radiusValue > 0) {
-              _radiusKm = radiusValue;
-            }
-
-            final maxRadiusValue = _toDouble(defaults['maxRadiusKm']);
-            if (maxRadiusValue != null && maxRadiusValue > 0) {
-              _maxRadiusKm = maxRadiusValue;
-              if (_radiusKm > _maxRadiusKm) {
-                _radiusKm = _maxRadiusKm;
-              }
-            }
-          }
-        }
-      }
-    } catch (_) {}
-
-    if (_reportCategories.isEmpty) {
-      _reportCategories = _fallbackReportCategories;
-      _selectedReportCategoryKey ??= _reportCategories.first.key;
-    }
-
-    if (_publicDataLayers.isEmpty) {
-      _publicDataLayers = _fallbackPublicLayers
-          .map(
-            (layer) => layer.copyWith(
-              isSelected: _defaultSelectedLayerKeys.contains(layer.key),
-            ),
-          )
-          .toList(growable: false);
-    }
-
-    _isLoadingMetadata = false;
-    notifyListeners();
-  }
-
-  List<HeatmapReportCategoryMetadata> _parseReportCategories(dynamic value) {
-    if (value is! List) return const [];
-
-    final parsed = <HeatmapReportCategoryMetadata>[];
-    for (final item in value) {
-      if (item is! Map) continue;
-      final map = Map<String, dynamic>.from(item);
-      final key = (map['key'] ?? '').toString();
-      if (key.isEmpty) continue;
-
-      parsed.add(HeatmapReportCategoryMetadata.fromJson(map));
-    }
-
-    return parsed;
-  }
-
-  List<HeatmapLayerMetadata> _parsePublicLayers(dynamic value) {
-    if (value is! List) return const [];
-
-    final parsed = <HeatmapLayerMetadata>[];
-    for (final item in value) {
-      if (item is! Map) continue;
-      final map = Map<String, dynamic>.from(item);
-      final key = (map['key'] ?? '').toString();
-      if (key.isEmpty) continue;
-
-      parsed.add(
-        HeatmapLayerMetadata.fromJson(
-          map,
-          isSelected: _defaultSelectedLayerKeys.contains(key),
-        ),
-      );
-    }
-
-    return parsed;
   }
 
   Future<void> _loadCurrentLocation() async {
@@ -769,13 +670,6 @@ class MapViewModel extends ChangeNotifier {
     }
 
     return fallback ?? 'Ein unbekannter Fehler ist aufgetreten.';
-  }
-
-  double? _toDouble(dynamic value) {
-    if (value is double) return value;
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
   }
 
   @override
