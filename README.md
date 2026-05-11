@@ -1,5 +1,5 @@
 # SafeWalk
-SafeWalk's repository for the 1st-party app's Backend and Frontend.
+SafeWalk's repository for the 1st-party app's Backend and Frontend. 
 
 ## Ways of Working
 

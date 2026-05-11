@@ -327,31 +327,20 @@ const writeCachedPois = async (
   pois: MapPoi[],
 ): Promise<void> => {
   const now = Math.floor(Date.now() / 1000);
-  // Strip the verbose `tags` map before persisting – the frontend only needs
-  // id, category, lat, lng and name. This drastically shrinks the item size
-  // and avoids hitting DynamoDB's 400 KB item limit in dense urban areas.
-  const leanPois = pois.map(({ id, category, lat, lng, name }) => ({
-    id,
-    category,
-    lat,
-    lng,
-    ...(name ? { name } : {}),
-  }));
   try {
     await docClient.send(
       new PutCommand({
         TableName: cacheTable,
         Item: {
           cacheKey,
-          pois: leanPois,
+          pois,
           cachedAt: new Date().toISOString(),
           expiresAt: now + CACHE_TTL_SECONDS,
         },
       }),
     );
-    console.log(`Cache WRITE OK – key=${cacheKey}, pois=${leanPois.length}`);
   } catch (err) {
-    console.error('Cache write failed', err);
+    console.warn('Cache write failed', err);
   }
 };
 
@@ -440,7 +429,6 @@ const handleGetMapData = async (
       const query = buildOverpassQuery(lat, lng, MAX_RADIUS_METERS);
       const overpass = await fetchOverpass(query);
       pois = overpassToPois(overpass);
-      console.log(`Overpass returned ${pois.length} POIs for (${lat},${lng}) r=${MAX_RADIUS_METERS}`);
       // Write-through cache. Failures are non-fatal.
       await writeCachedPois(cacheTable, cacheKey, pois);
     } catch (err) {
@@ -449,19 +437,11 @@ const handleGetMapData = async (
       cacheStatus = 'BYPASS';
       pois = [];
     }
-  } else {
-    console.log(`Cache HIT – key=${cacheKey}, pois=${pois.length}`);
   }
 
-  const filteredPois = pois
-    .filter((p) => haversineMeters(lat, lng, p.lat, p.lng) <= radius)
-    .map(({ id, category, lat: pLat, lng: pLng, name }) => ({
-      id,
-      category,
-      lat: pLat,
-      lng: pLng,
-      ...(name ? { name } : {}),
-    }));
+  const filteredPois = pois.filter(
+    (p) => haversineMeters(lat, lng, p.lat, p.lng) <= radius,
+  );
 
   let reports: MapReport[] = [];
   try {

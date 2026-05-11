@@ -10,7 +10,7 @@ class MapboxPlacesService {
           geocodingBaseUrl ??
           'https://api.mapbox.com/geocoding/v5/mapbox.places';
 
-  static const accessToken = 'pk.eyJ1Ijoic2FmZXdhbGt0ZWFtIiwiYSI6ImNtb2lmazhoODAxdzYycXMxNGR6aG1iaGMifQ.S4JBKMH9TpvdGSTW5QEMWw';
+  static const accessToken = '';
 
   static const styleUri =
       'mapbox://styles/safewalkteam/cmobay96u00a801s805jsegqr';

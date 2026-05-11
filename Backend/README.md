@@ -172,7 +172,7 @@ Erstellt ein neues Benutzerkonto. Cognito sendet automatisch einen Bestätigungs
 
 ```json
 {
-  "message": "Sign-up successful. Please check your email for a verification code.",
+  "message": "Sign-up successful. Please check your email for a verification code. ",
   "userSub": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "confirmed": false
 }

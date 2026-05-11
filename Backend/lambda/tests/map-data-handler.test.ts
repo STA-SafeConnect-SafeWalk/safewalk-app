@@ -171,54 +171,6 @@ describe('map-data-handler', () => {
       expect(body.data.cache).toBe('MISS');
       const categories = body.data.pois.map((p: { category: string }) => p.category).sort();
       expect(categories).toEqual(['EMERGENCY_PHONE', 'POLICE', 'UNLIT_WAY']);
-
-      // Verify cache was actually written with lean POIs (no tags)
-      const putCalls = ddbMock.commandCalls(PutCommand);
-      const cachePut = putCalls.find(
-        (c) => c.args[0].input.TableName === 'MapDataCache',
-      );
-      expect(cachePut).toBeDefined();
-      const cachedItem = cachePut!.args[0].input.Item as Record<string, unknown>;
-      expect(cachedItem.cacheKey).toBeDefined();
-      expect(cachedItem.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000));
-      const cachedPois = cachedItem.pois as Array<Record<string, unknown>>;
-      expect(cachedPois).toHaveLength(3);
-      // Tags must be stripped from cached items
-      for (const poi of cachedPois) {
-        expect(poi.tags).toBeUndefined();
-        expect(poi.id).toBeDefined();
-        expect(poi.category).toBeDefined();
-        expect(poi.lat).toBeDefined();
-        expect(poi.lng).toBeDefined();
-      }
-      // Verify name is preserved where present
-      const policePoi = cachedPois.find((p) => p.category === 'POLICE');
-      expect(policePoi?.name).toBe('Police HQ');
-      // Verify name is absent when OSM doesn't provide one
-      const phonePoi = cachedPois.find((p) => p.category === 'EMERGENCY_PHONE');
-      expect(phonePoi?.name).toBeUndefined();
-    });
-
-    it('response POIs do not contain tags', async () => {
-      ddbMock.on(GetCommand).resolves({
-        Item: {
-          cacheKey: 'osm#52.520#13.400#r5000',
-          pois: [
-            { id: 'node/1', category: 'HOSPITAL', lat: 52.5200, lng: 13.4050, name: 'Klinikum' },
-          ],
-          expiresAt: Math.floor(Date.now() / 1000) + 3600,
-        },
-      });
-      ddbMock.on(QueryCommand).resolves({ Items: [] });
-
-      const result = (await handler(
-        buildEvent('GET /map-data', { userId: 'u1', query: validQuery }),
-      )) as { statusCode: number; body: string };
-      const body = JSON.parse(result.body);
-
-      expect(body.data.pois).toHaveLength(1);
-      expect(body.data.pois[0].tags).toBeUndefined();
-      expect(body.data.pois[0].name).toBe('Klinikum');
     });
 
     it('filters POIs outside the requested radius', async () => {

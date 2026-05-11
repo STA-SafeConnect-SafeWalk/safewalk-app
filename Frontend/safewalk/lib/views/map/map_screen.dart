@@ -238,6 +238,7 @@ class _MapScreenState extends State<MapScreen> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     _markerIconCache.clear();
+    _descriptionController.dispose();
     super.dispose();
   }
 

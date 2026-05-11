@@ -86,8 +86,7 @@ class ApiConstants {
   static String sosPropagate(String sosId) => '/sos/$sosId/propagate';
 
   /// Returns the path for a specific map report: /map-data/reports/{reportId}
-  static String mapReportById(String reportId) =>
-      '/map-data/reports/$reportId';
+  static String mapReportById(String reportId) => '/map-data/reports/$reportId';
 
   // ---------------------------------------------------------------------------
   // Live location endpoints (JWT required)
