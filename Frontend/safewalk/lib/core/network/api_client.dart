@@ -208,15 +208,15 @@ class ApiClient {
       final serverMessage = parsed is Map ? parsed['error'] as String? : null;
       final String message;
       if (response.statusCode == 401 || response.statusCode == 403) {
-        message = 'Please log in again to continue.';
+        message = 'Bitte melde dich erneut an, um fortzufahren.';
       } else if (response.statusCode == 404) {
-        message = 'The requested data could not be found.';
+        message = 'Die angeforderten Daten wurden nicht gefunden.';
       } else if (response.statusCode >= 500) {
-        message = 'Server error. Please try again later.';
+        message = 'Serverfehler. Bitte versuche es später erneut.';
       } else if (serverMessage != null && serverMessage.isNotEmpty) {
         message = serverMessage;
       } else {
-        message = 'Something went wrong. Please try again.';
+        message = 'Etwas ist schiefgelaufen. Bitte versuche es erneut.';
       }
       return ApiResult.error(
         statusCode: response.statusCode,
@@ -239,7 +239,7 @@ class ApiClient {
   /// Converts a raw exception into a user-friendly error message.
   String _userFriendlyError(Object e) {
     if (e is TimeoutException) {
-      return 'The server took too long to respond. Please try again.';
+      return 'Der Server hat zu lange gebraucht, um zu antworten. Bitte versuche es erneut.';
     }
     final msg = e.toString().toLowerCase();
     if (msg.contains('socketexception') ||
@@ -247,12 +247,12 @@ class ApiClient {
         msg.contains('network is unreachable') ||
         msg.contains('no address associated') ||
         msg.contains('failed host lookup')) {
-      return 'No internet connection. Please check your network and try again.';
+      return 'Keine Internetverbindung. Bitte prüfe dein Netzwerk und versuche es erneut.';
     }
     if (msg.contains('connection reset') ||
         msg.contains('connection closed')) {
-      return 'Connection lost. Please try again.';
+      return 'Verbindung unterbrochen. Bitte versuche es erneut.';
     }
-    return 'Something went wrong. Please try again later.';
+    return 'Etwas ist schiefgelaufen. Bitte versuche es später erneut.';
   }
 }

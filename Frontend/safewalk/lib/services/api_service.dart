@@ -62,7 +62,7 @@ class ApiService {
     if (!await _ensureAuth()) {
       return ApiResult.error(
         statusCode: 401,
-        message: 'Not authenticated. Please sign in first.',
+        message: 'Nicht angemeldet. Bitte melde dich zuerst an.',
       );
     }
 
@@ -193,7 +193,7 @@ class ApiService {
     if (storedRefreshToken == null || storedRefreshToken.isEmpty) {
       return ApiResult.error(
         statusCode: 400,
-        message: 'No refresh token available.',
+        message: 'Kein Refresh-Token vorhanden.',
       );
     }
 
