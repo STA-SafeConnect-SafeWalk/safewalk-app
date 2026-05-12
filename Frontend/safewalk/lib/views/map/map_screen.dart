@@ -822,7 +822,7 @@ class _MapScreenState extends State<MapScreen> {
             if (report.createdAt != null) ...[
               const SizedBox(height: 10),
               Text(
-                'Gemeldet am ${_formatDate(report.createdAt!)}',
+                'Community-Beitrag. Gemeldet am ${_formatDate(report.createdAt!)}',
                 style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
               ),
             ],
