@@ -127,6 +127,7 @@ class MapViewModel extends ChangeNotifier {
 
   LatLng? _userLocation;
   LatLng? _selectedSearchLocation;
+  MapPlaceSuggestion? _selectedSearchSuggestion;
   LatLng? _reportTapLocation;
 
   MapViewportBounds? _lastViewportBounds;
@@ -187,6 +188,7 @@ class MapViewModel extends ChangeNotifier {
 
   LatLng? get userLocation => _userLocation;
   LatLng? get selectedSearchLocation => _selectedSearchLocation;
+  MapPlaceSuggestion? get selectedSearchSuggestion => _selectedSearchSuggestion;
   LatLng? get reportTapLocation => _reportTapLocation;
 
   String get searchQuery => _searchQuery;
@@ -496,6 +498,7 @@ class MapViewModel extends ChangeNotifier {
     _searchSuggestions = const [];
     _searchQuery = suggestion.fullName;
     _selectedSearchLocation = LatLng(suggestion.lat, suggestion.lng);
+    _selectedSearchSuggestion = suggestion;
     _mapCenter = _selectedSearchLocation!;
     _zoom = 15.5;
     notifyListeners();
