@@ -370,6 +370,22 @@ class _TipIcon extends StatelessWidget {
       case 'directions':
       case 'map':
         return Icons.map_outlined;
+      case 'insights':
+        return Icons.insights_outlined;
+      case 'psychology':
+        return Icons.psychology_outlined;
+      case 'share_location':
+        return Icons.share_location_outlined;
+      case 'emergency':
+        return Icons.emergency_outlined;
+      case 'local_police':
+        return Icons.local_police_outlined;
+      case 'campaign':
+        return Icons.campaign_outlined;
+      case 'sports_martial_arts':
+        return Icons.sports_martial_arts_outlined;
+      case 'help':
+        return Icons.help_outline;
       default:
         return Icons.tips_and_updates_outlined;
     }
