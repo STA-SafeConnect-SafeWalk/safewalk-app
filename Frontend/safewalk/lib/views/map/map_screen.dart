@@ -1809,7 +1809,7 @@ class _LayerSelectionSheet extends StatelessWidget {
               label: Text(
                 vm.isLoadingMapData
                     ? 'Aktualisieren...'
-                    : 'Daten aktualisieren',
+                    : 'Daten für ausgewählten Bereich neu laden',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _kMapPrimary,
@@ -1890,7 +1890,7 @@ class _ReportSheetState extends State<_ReportSheet> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Melde einen Punkt direkt an das Backend.',
+            'Teile deine Erfahrung mit anderen',
             style: TextStyle(color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 14),

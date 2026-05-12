@@ -302,6 +302,10 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
     _codeInputController.clear();
   }
 
+  void _showHelpPopup(BuildContext context) {
+    showDialog(context: context, builder: (_) => const _HelpPopup());
+  }
+
   String _formatExpiry(DateTime dt) {
     final day = dt.day.toString().padLeft(2, '0');
     final month = dt.month.toString().padLeft(2, '0');
@@ -621,9 +625,7 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
 
             Center(
               child: TextButton(
-                onPressed: () {
-                  // TODO: help action
-                },
+                onPressed: () => _showHelpPopup(context),
                 child: const Text(
                   'Hilfe',
                   style: TextStyle(fontSize: 14, color: _kTealMid),
@@ -640,6 +642,276 @@ class _SharingCodePanelState extends State<_SharingCodePanel> {
       sizeCurve: Curves.easeInOut,
     );
   }
+}
+
+// ─── Help Popup with Timeline ─────────────────────────────────────────────────
+
+class _HelpPopup extends StatelessWidget {
+  const _HelpPopup();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with close button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'So funktioniert es',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: _kTextDark,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _kInputBg,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: _kTextDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Vertrauenswürdige Personen hinzufügen und Standort / SOS teilen:',
+              style: TextStyle(fontSize: 14, color: _kTealMid, height: 1.43),
+            ),
+            const SizedBox(height: 24),
+            // Timeline
+            _Timeline(
+              items: [
+                TimelineItem(
+                  title: 'Code generieren',
+                  description:
+                      'Erstelle einen Sharing Code, falls noch kein Sharing Code vorhanden ist.',
+                ),
+                TimelineItem(
+                  title: 'Code teilen',
+                  description:
+                      'Sende den Code an eine vertrauenswürdige Person.',
+                ),
+                TimelineItem(
+                  title: 'Code eingeben',
+                  description:
+                      'Die Person gibt deinen Code im Eingabefeld ein. Die Verbindung ist dann standardmäßig einseitig aktiviert. ',
+                ),
+                TimelineItem(
+                  title: 'Standort / SOS teilen',
+                  description:
+                      'Je nach Einstellung erhält die vertrauenswürdige Person deinen Standort oder SOS Alarme, wenn du sie benötigst.',
+                ),
+                TimelineItem(
+                  title: 'Verbindung beidseitig aktivieren',
+                  description:
+                      'Die vertrauenwürdige Person kann die Verbindung ebenfalls aktivieren, um ein beidseitiges Teilen zu ermöglichen.',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class TimelineItem {
+  final String title;
+  final String description;
+
+  TimelineItem({required this.title, required this.description});
+}
+
+class _Timeline extends StatefulWidget {
+  const _Timeline({required this.items});
+
+  final List<TimelineItem> items;
+
+  @override
+  State<_Timeline> createState() => _TimelineState();
+}
+
+class _TimelineState extends State<_Timeline> {
+  final List<GlobalKey> _itemKeys = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _itemKeys.addAll(List.generate(widget.items.length, (_) => GlobalKey()));
+  }
+
+  List<double> _calculateDotPositions() {
+    final positions = <double>[];
+    final containerContext = context;
+    final containerRenderBox =
+        containerContext.findRenderObject() as RenderBox?;
+
+    if (containerRenderBox == null) return positions;
+
+    for (final key in _itemKeys) {
+      final itemContext = key.currentContext;
+      if (itemContext != null) {
+        final itemBox = itemContext.findRenderObject() as RenderBox?;
+        if (itemBox != null) {
+          // Get item's position relative to container
+          final itemOffset = itemBox.localToGlobal(
+            Offset.zero,
+            ancestor: containerRenderBox,
+          );
+          positions.add(itemOffset.dy + 12);
+        }
+      }
+    }
+    return positions;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+
+    final dotPositions = _calculateDotPositions();
+
+    return SizedBox(
+      width: double.infinity,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: List.generate(
+                widget.items.length,
+                (index) => Padding(
+                  key: _itemKeys[index],
+                  padding: EdgeInsets.only(
+                    bottom: index < widget.items.length - 1 ? 24 : 0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.items[index].title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _kTextDark,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.items[index].description,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _kTealMid,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Timeline painter overlay
+          if (dotPositions.isNotEmpty)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 24,
+              child: CustomPaint(
+                painter: _TimelinePainter(
+                  itemCount: widget.items.length,
+                  dotPositions: dotPositions,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelinePainter extends CustomPainter {
+  final int itemCount;
+  final List<double> dotPositions;
+
+  _TimelinePainter({required this.itemCount, required this.dotPositions});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const lineColor = Color(0xFF00666B);
+    const lineWidth = 2.0;
+    const dotRadius = 6.0;
+    const dotOuterRadius = 10.0;
+
+    if (dotPositions.isEmpty) return;
+
+    // Draw vertical line from first to last dot
+    if (dotPositions.length > 1) {
+      canvas.drawLine(
+        Offset(12, dotPositions.first),
+        Offset(12, dotPositions.last),
+        Paint()
+          ..color = lineColor
+          ..strokeWidth = lineWidth,
+      );
+    }
+
+    // Draw dots at exact positions
+    for (final yPosition in dotPositions) {
+      // Outer circle (white background)
+      canvas.drawCircle(
+        Offset(12, yPosition),
+        dotOuterRadius,
+        Paint()..color = Colors.white,
+      );
+
+      // Outer ring (teal border)
+      canvas.drawCircle(
+        Offset(12, yPosition),
+        dotOuterRadius,
+        Paint()
+          ..color = lineColor
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke,
+      );
+
+      // Inner dot (teal fill)
+      canvas.drawCircle(
+        Offset(12, yPosition),
+        dotRadius,
+        Paint()..color = lineColor,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TimelinePainter oldDelegate) =>
+      oldDelegate.itemCount != itemCount ||
+      oldDelegate.dotPositions != dotPositions;
 }
 
 // ─── Contact Card ─────────────────────────────────────────────────────────────
