@@ -78,6 +78,25 @@ jobs:
             backend:
               - 'Backend/**'
 
+  detect-frontend-changes:
+    name: Detect Frontend Changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'Frontend/**'
+
   test-backend:
     name: Test Backend
     needs: detect-backend-changes
@@ -99,6 +118,47 @@ jobs:
       - name: Run lambda unit tests
         working-directory: Backend/lambda
         run: npm test
+
+  test-frontend:
+    name: Test Frontend
+    needs: detect-frontend-changes
+    if: needs.detect-frontend-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter dependencies
+        working-directory: Frontend/safewalk
+        run: flutter pub get
+
+      - name: Run Flutter tests with coverage
+        working-directory: Frontend/safewalk
+        run: flutter test --coverage
+
+      - name: Enforce coverage threshold
+        working-directory: Frontend/safewalk
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lcov
+          lcov --remove coverage/lcov.info \
+            'lib/views/**' \
+            'lib/firebase_options.dart' \
+            'lib/services/push_notification_service.dart' \
+            -o coverage/lcov.filtered.info
+          lcov --summary coverage/lcov.filtered.info
+          COVERAGE=$(lcov --summary coverage/lcov.filtered.info | awk '/lines/{print $2}' | sed 's/%//')
+          COVERAGE_INT=${COVERAGE%.*}
+          if [ "$COVERAGE_INT" -lt 80 ]; then
+            echo "Line coverage ${COVERAGE}% is below 80%."
+            exit 1
+          fi
 
   deploy-infra:
     name: Deploy Infrastructure
