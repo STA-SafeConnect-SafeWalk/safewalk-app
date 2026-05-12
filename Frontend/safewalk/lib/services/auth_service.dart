@@ -29,7 +29,7 @@ class AuthService {
   final FlutterSecureStorage _secure;
 
   AuthService({FlutterSecureStorage? storage})
-      : _secure = storage ?? const FlutterSecureStorage();
+    : _secure = storage ?? const FlutterSecureStorage();
 
   // ---------------------------------------------------------------------------
   // Internal read / write helpers

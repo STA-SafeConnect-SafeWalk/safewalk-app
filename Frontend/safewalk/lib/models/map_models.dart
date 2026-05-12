@@ -176,14 +176,8 @@ class ContactLiveLocation {
   }
 
   @override
-  int get hashCode => Object.hash(
-    safeWalkId,
-    displayName,
-    lat,
-    lng,
-    accuracy,
-    updatedAt,
-  );
+  int get hashCode =>
+      Object.hash(safeWalkId, displayName, lat, lng, accuracy, updatedAt);
 }
 
 /// An active SOS alarm received by the authenticated user.
@@ -223,14 +217,18 @@ class ActiveSosLocation {
 
     final updatedRaw = json['updatedAt'];
     final createdRaw = json['createdAt'];
-    final updatedAt = updatedRaw is String ? DateTime.tryParse(updatedRaw) : null;
-    final createdAt = createdRaw is String ? DateTime.tryParse(createdRaw) : null;
+    final updatedAt = updatedRaw is String
+        ? DateTime.tryParse(updatedRaw)
+        : null;
+    final createdAt = createdRaw is String
+        ? DateTime.tryParse(createdRaw)
+        : null;
     if (updatedAt == null || createdAt == null) return null;
 
     return ActiveSosLocation(
       sosId: (json['sosId'] ?? '').toString(),
-      victimDisplayName:
-          (json['victimDisplayName'] ?? 'Unbekannte Person').toString(),
+      victimDisplayName: (json['victimDisplayName'] ?? 'Unbekannte Person')
+          .toString(),
       lat: lat,
       lng: lng,
       accuracy: _toDouble(geo['accuracy']) ?? 0,
@@ -270,4 +268,3 @@ double? _toDouble(dynamic value) {
   if (value is String) return double.tryParse(value);
   return null;
 }
-

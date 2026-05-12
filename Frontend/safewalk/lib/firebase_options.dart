@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 class DefaultFirebaseOptions {
-  static const String _vapidKeyRaw =
-      String.fromEnvironment('FIREBASE_VAPID_KEY');
+  static const String _vapidKeyRaw = String.fromEnvironment(
+    'FIREBASE_VAPID_KEY',
+  );
 
   static String? get vapidKey => _vapidKeyRaw.isEmpty ? null : _vapidKeyRaw;
 

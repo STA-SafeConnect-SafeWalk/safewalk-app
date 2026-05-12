@@ -62,7 +62,7 @@ class ApiService {
     if (!await _ensureAuth()) {
       return ApiResult.error(
         statusCode: 401,
-        message: 'Not authenticated. Please sign in first.',
+        message: 'Nicht angemeldet. Bitte melde dich zuerst an.',
       );
     }
 
@@ -193,7 +193,7 @@ class ApiService {
     if (storedRefreshToken == null || storedRefreshToken.isEmpty) {
       return ApiResult.error(
         statusCode: 400,
-        message: 'No refresh token available.',
+        message: 'Kein Refresh-Token vorhanden.',
       );
     }
 
@@ -542,9 +542,7 @@ class ApiService {
   /// Retrieves SOS alarms received by the current user (i.e. alarms where the
   /// user is a target / trusted contact).
   Future<ApiResult> getReceivedSosAlarms() async {
-    return _authenticatedRequest(
-      () => _client.get(ApiConstants.sosReceived),
-    );
+    return _authenticatedRequest(() => _client.get(ApiConstants.sosReceived));
   }
 
   // ===========================================================================

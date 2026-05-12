@@ -49,9 +49,7 @@ class _SafeWalkAppState extends State<SafeWalkApp> {
         useMaterial3: true,
       ),
       home: _initialising
-          ? const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            )
+          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : Consumer<LoginViewModel>(
               builder: (context, loginVm, _) {
                 if (loginVm.isAuthenticated) {

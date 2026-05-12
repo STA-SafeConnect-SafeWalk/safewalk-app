@@ -78,16 +78,8 @@ class MapViewModel extends ChangeNotifier {
       label: 'Krankenhäuser',
       iconKey: 'hospital',
     ),
-    MapLayerMetadata(
-      key: 'CLINIC',
-      label: 'Kliniken',
-      iconKey: 'clinic',
-    ),
-    MapLayerMetadata(
-      key: 'PHARMACY',
-      label: 'Apotheken',
-      iconKey: 'pharmacy',
-    ),
+    MapLayerMetadata(key: 'CLINIC', label: 'Kliniken', iconKey: 'clinic'),
+    MapLayerMetadata(key: 'PHARMACY', label: 'Apotheken', iconKey: 'pharmacy'),
     MapLayerMetadata(
       key: 'FIRE_STATION',
       label: 'Feuerwehr',
@@ -143,8 +135,9 @@ class MapViewModel extends ChangeNotifier {
   List<MapPlaceSuggestion> _searchSuggestions = const [];
 
   List<MapLayerMetadata> _publicDataLayers = const [];
-  final List<MapReportCategoryMetadata> _reportCategories =
-      List.unmodifiable(_availableReportCategories);
+  final List<MapReportCategoryMetadata> _reportCategories = List.unmodifiable(
+    _availableReportCategories,
+  );
   List<PublicDataPoint> _publicDataPoints = const [];
 
   String? _selectedReportCategoryKey;
@@ -258,9 +251,7 @@ class MapViewModel extends ChangeNotifier {
     final selected = selectedLayers;
     if (selected.isEmpty || _publicDataPoints.isEmpty) return const [];
 
-    final selectedKeys = {
-      for (final layer in selected) layer.key: layer.label,
-    };
+    final selectedKeys = {for (final layer in selected) layer.key: layer.label};
 
     final entries = <MapLayerEntry>[];
     for (final point in _publicDataPoints) {

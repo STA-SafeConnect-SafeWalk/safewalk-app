@@ -219,10 +219,7 @@ class _MapScreenState extends State<MapScreen> {
     return true;
   }
 
-  bool _sosEqual(
-    List<ActiveSosLocation>? a,
-    List<ActiveSosLocation>? b,
-  ) {
+  bool _sosEqual(List<ActiveSosLocation>? a, List<ActiveSosLocation>? b) {
     if (identical(a, b)) return true;
     if (a == null || b == null || a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
@@ -728,10 +725,12 @@ class _MapScreenState extends State<MapScreen> {
     if (!mounted) return;
 
     final vm = context.read<MapViewModel>();
-    final categoryLabel = vm.reportCategories
-        .where((c) => c.key == report.type)
-        .map((c) => c.label)
-        .firstOrNull ?? report.type;
+    final categoryLabel =
+        vm.reportCategories
+            .where((c) => c.key == report.type)
+            .map((c) => c.label)
+            .firstOrNull ??
+        report.type;
 
     showModalBottomSheet<void>(
       context: context,
@@ -765,25 +764,18 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            if (report.comment != null &&
-                report.comment!.isNotEmpty) ...[
+            if (report.comment != null && report.comment!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
                 report.comment!,
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFF475569),
-                ),
+                style: const TextStyle(fontSize: 15, color: Color(0xFF475569)),
               ),
             ],
             if (report.createdAt != null) ...[
               const SizedBox(height: 10),
               Text(
                 'Gemeldet am ${_formatDate(report.createdAt!)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF94A3B8),
-                ),
+                style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
               ),
             ],
           ],
@@ -929,9 +921,7 @@ class _MapScreenState extends State<MapScreen> {
       );
       options.add(
         PointAnnotationOptions(
-          geometry: Point(
-            coordinates: Position(contact.lng, contact.lat),
-          ),
+          geometry: Point(coordinates: Position(contact.lng, contact.lat)),
           image: icon,
           iconAnchor: IconAnchor.CENTER,
           iconSize: 1,
@@ -1050,9 +1040,7 @@ class _MapScreenState extends State<MapScreen> {
     final cleaned = name.trim();
     if (cleaned.isEmpty) return '?';
     final parts = cleaned.split(RegExp(r'\s+'));
-    if (parts.length >= 2 &&
-        parts.first.isNotEmpty &&
-        parts.last.isNotEmpty) {
+    if (parts.length >= 2 && parts.first.isNotEmpty && parts.last.isNotEmpty) {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
     }
     return cleaned[0].toUpperCase();
@@ -1115,10 +1103,7 @@ class _MapScreenState extends State<MapScreen> {
     const radius = 32.0;
 
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      const Rect.fromLTWH(0, 0, size, size),
-    );
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, size, size));
 
     final shadowPaint = Paint()
       ..color = const Color(0x33000000)
@@ -1824,7 +1809,7 @@ class _LayerSelectionSheet extends StatelessWidget {
               label: Text(
                 vm.isLoadingMapData
                     ? 'Aktualisieren...'
-                    : 'Daten aktualisieren',
+                    : 'Daten für ausgewählten Bereich neu laden',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _kMapPrimary,
@@ -1905,7 +1890,7 @@ class _ReportSheetState extends State<_ReportSheet> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Melde einen Punkt direkt an das Backend.',
+            'Teile deine Erfahrung mit anderen',
             style: TextStyle(color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 14),
@@ -2080,10 +2065,7 @@ class _DetailRow extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           '$label: ',
-          style: const TextStyle(
-            color: Color(0xFF64748B),
-            fontSize: 14,
-          ),
+          style: const TextStyle(color: Color(0xFF64748B), fontSize: 14),
         ),
         Expanded(
           child: Text(

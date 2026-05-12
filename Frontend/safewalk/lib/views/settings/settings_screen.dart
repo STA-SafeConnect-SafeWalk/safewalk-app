@@ -102,7 +102,8 @@ class _SettingsView extends StatelessWidget {
                         // ── Account actions ───────────────────────────
                         _AccountActionsCard(
                           onSignOut: () => _confirmSignOut(context),
-                          onDeleteAccount: () => _confirmDeleteAccount(context, vm),
+                          onDeleteAccount: () =>
+                              _confirmDeleteAccount(context, vm),
                           isDeleting: vm.isDeleting,
                         ),
                       ],
@@ -344,10 +345,7 @@ class _EditDisplayNameCardState extends State<_EditDisplayNameCard> {
                       hintText: 'Dein Name',
                       hintStyle: TextStyle(fontSize: 16, color: _kTealMid),
                     ),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: _kTextDark,
-                    ),
+                    style: const TextStyle(fontSize: 16, color: _kTextDark),
                   ),
                 ),
               ],
@@ -518,7 +516,13 @@ class _ActionRow extends StatelessWidget {
           ),
         ),
         if (showDivider)
-          const Divider(height: 1, thickness: 1, color: _kDivider, indent: 20, endIndent: 20),
+          const Divider(
+            height: 1,
+            thickness: 1,
+            color: _kDivider,
+            indent: 20,
+            endIndent: 20,
+          ),
       ],
     );
   }

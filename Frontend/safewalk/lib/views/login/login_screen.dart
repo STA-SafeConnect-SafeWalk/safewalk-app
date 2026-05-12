@@ -155,11 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
   List<Widget> _buildFormFields(LoginViewModel vm) {
     switch (vm.authMode) {
       case AuthMode.signIn:
-        return [
-          _emailField(),
-          const SizedBox(height: 16),
-          _passwordField(),
-        ];
+        return [_emailField(), const SizedBox(height: 16), _passwordField()];
 
       case AuthMode.signUp:
         return [
@@ -178,9 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ];
 
       case AuthMode.forgotPassword:
-        return [
-          _emailField(),
-        ];
+        return [_emailField()];
 
       case AuthMode.confirmForgotPassword:
         return [
@@ -198,53 +192,72 @@ class _LoginScreenState extends State<LoginScreen> {
 
     switch (vm.authMode) {
       case AuthMode.signIn:
-        widgets.add(TextButton(
-          onPressed:
-              vm.isLoading ? null : () => vm.switchMode(AuthMode.signUp),
-          child: const Text('Noch kein Konto? Registrieren'),
-        ));
-        widgets.add(TextButton(
-          onPressed: vm.isLoading
-              ? null
-              : () => vm.switchMode(AuthMode.forgotPassword),
-          child: const Text('Passwort vergessen?'),
-        ));
-        widgets.add(TextButton(
-          onPressed: vm.isLoading ? null : () => vm.skipLogin(),
-          child: const Text('Skip Login (Dev)'),
-        ));
+        widgets.add(
+          TextButton(
+            onPressed: vm.isLoading
+                ? null
+                : () => vm.switchMode(AuthMode.signUp),
+            child: const Text('Noch kein Konto? Registrieren'),
+          ),
+        );
+        widgets.add(
+          TextButton(
+            onPressed: vm.isLoading
+                ? null
+                : () => vm.switchMode(AuthMode.forgotPassword),
+            child: const Text('Passwort vergessen?'),
+          ),
+        );
+        widgets.add(
+          TextButton(
+            onPressed: vm.isLoading ? null : () => vm.skipLogin(),
+            child: const Text('Skip Login (Dev)'),
+          ),
+        );
         break;
 
       case AuthMode.signUp:
-        widgets.add(TextButton(
-          onPressed:
-              vm.isLoading ? null : () => vm.switchMode(AuthMode.signIn),
-          child: const Text('Bereits ein Konto? Anmelden'),
-        ));
+        widgets.add(
+          TextButton(
+            onPressed: vm.isLoading
+                ? null
+                : () => vm.switchMode(AuthMode.signIn),
+            child: const Text('Bereits ein Konto? Anmelden'),
+          ),
+        );
         break;
 
       case AuthMode.confirmSignUp:
-        widgets.add(TextButton(
-          onPressed:
-              vm.isLoading ? null : () => vm.switchMode(AuthMode.signIn),
-          child: const Text('Zurück zum Login'),
-        ));
+        widgets.add(
+          TextButton(
+            onPressed: vm.isLoading
+                ? null
+                : () => vm.switchMode(AuthMode.signIn),
+            child: const Text('Zurück zum Login'),
+          ),
+        );
         break;
 
       case AuthMode.forgotPassword:
-        widgets.add(TextButton(
-          onPressed:
-              vm.isLoading ? null : () => vm.switchMode(AuthMode.signIn),
-          child: const Text('Zurück zum Login'),
-        ));
+        widgets.add(
+          TextButton(
+            onPressed: vm.isLoading
+                ? null
+                : () => vm.switchMode(AuthMode.signIn),
+            child: const Text('Zurück zum Login'),
+          ),
+        );
         break;
 
       case AuthMode.confirmForgotPassword:
-        widgets.add(TextButton(
-          onPressed:
-              vm.isLoading ? null : () => vm.switchMode(AuthMode.signIn),
-          child: const Text('Zurück zum Login'),
-        ));
+        widgets.add(
+          TextButton(
+            onPressed: vm.isLoading
+                ? null
+                : () => vm.switchMode(AuthMode.signIn),
+            child: const Text('Zurück zum Login'),
+          ),
+        );
         break;
     }
 
@@ -326,10 +339,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _submit(LoginViewModel vm) {
     switch (vm.authMode) {
       case AuthMode.signIn:
-        vm.signIn(
-          _emailController.text.trim(),
-          _passwordController.text,
-        );
+        vm.signIn(_emailController.text.trim(), _passwordController.text);
         break;
 
       case AuthMode.signUp:

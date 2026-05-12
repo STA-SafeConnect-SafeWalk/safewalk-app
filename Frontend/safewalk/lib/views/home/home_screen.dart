@@ -60,8 +60,7 @@ class _HomeView extends StatelessWidget {
             ? 'Dein Standort wird mit deinen Notfallkontakten geteilt'
             : 'Dein Standort wird aktuell nicht geteilt');
 
-    final headphonesOn =
-        context.watch<HeadphoneService>().isConnected;
+    final headphonesOn = context.watch<HeadphoneService>().isConnected;
 
     return Container(
       key: const ValueKey('home-state'),
@@ -79,9 +78,10 @@ class _HomeView extends StatelessWidget {
                   color: _kPurpleText,
                 ),
               ),
+              Spacer(),
               _HeadphoneChip(visible: headphonesOn),
               const Text(
-                'Geringes\nGefahrenpotenzial',
+                'Dein\nSicherheits-Begleiter',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: _kPurpleText,
@@ -90,35 +90,9 @@ class _HomeView extends StatelessWidget {
                   height: 1.2,
                 ),
               ),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () => _showRiskInfo(context),
-                borderRadius: BorderRadius.circular(14),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Mehr erfahren',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0x99362B3E),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(
-                        Icons.info_outline,
-                        size: 16,
-                        color: Color(0x99362B3E),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
+              Spacer(),
               _HomeSosButton(onTap: vm.startCountdown),
-              const SizedBox(height: 12),
+              const SizedBox(height: 24),
               const Text(
                 'SOS Notfall',
                 style: TextStyle(
@@ -127,7 +101,7 @@ class _HomeView extends StatelessWidget {
                   color: _kPurpleText,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 18),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 18),
                 child: Text(
@@ -140,7 +114,7 @@ class _HomeView extends StatelessWidget {
                   ),
                 ),
               ),
-              const Spacer(),
+              Spacer(flex: 2),
               _ShareStatusCard(
                 title: statusTitle,
                 subtitle: vm.bottomInfoText,
@@ -170,6 +144,7 @@ class _HomeView extends StatelessWidget {
                   ),
                 ),
               ),
+              Spacer(),
             ],
           ),
         ),
@@ -1015,8 +990,10 @@ class _HeadphoneChip extends StatelessWidget {
         curve: Curves.easeInOut,
         child: visible
             ? Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFF3E0),
                   borderRadius: BorderRadius.circular(999),

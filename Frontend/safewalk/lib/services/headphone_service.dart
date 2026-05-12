@@ -14,17 +14,6 @@ class HeadphoneService extends ChangeNotifier {
   final _controller = StreamController<bool>.broadcast();
   Stream<bool> get onChanged => _controller.stream;
 
-  void debugSetConnected(bool connected) {
-    assert(() {
-      if (connected != _connected) {
-        _connected = connected;
-        _controller.add(_connected);
-        notifyListeners();
-      }
-      return true;
-    }());
-  }
-
   Future<void> init() async {
     // package only supported on mobile platforms
     if (kIsWeb || !_isMobile) return;
