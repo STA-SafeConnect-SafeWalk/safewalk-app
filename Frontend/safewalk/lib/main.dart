@@ -8,11 +8,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import 'package:safewalk/app.dart';
 import 'package:safewalk/services/api_service.dart';
 import 'package:safewalk/services/auth_service.dart';
 import 'package:safewalk/services/headphone_service.dart';
+import 'package:safewalk/services/mapbox_places_service.dart';
 import 'package:safewalk/services/push_notification_service.dart';
 import 'package:safewalk/viewmodels/home_viewmodel.dart';
 import 'package:safewalk/viewmodels/login_viewmodel.dart';
@@ -23,6 +25,11 @@ import 'package:safewalk/viewmodels/tips_viewmodel.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Set the Mapbox access token before any MapView is created.
+  if (MapboxPlacesService.accessToken.isNotEmpty) {
+    MapboxOptions.setAccessToken(MapboxPlacesService.accessToken);
+  }
 
   // Shared services so all ViewModels use the same instances.
   final authService = AuthService();
