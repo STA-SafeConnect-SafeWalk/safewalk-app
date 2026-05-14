@@ -1506,7 +1506,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   String _formatAge(Duration age) {
-    if (age.isNegative || age.inSeconds < 5) return 'jetzt';
+    if (age.isNegative || age.inSeconds < 5) return 'einem Moment';
     if (age.inSeconds < 60) return '${age.inSeconds} s';
     if (age.inMinutes < 60) return '${age.inMinutes} min';
     final hours = age.inHours;
