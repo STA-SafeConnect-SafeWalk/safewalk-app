@@ -157,31 +157,33 @@ class _HomeView extends StatelessWidget {
     HomeViewModel vm,
   ) async {
     final enabling = !vm.isSharingLocation;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(
-          enabling
-              ? 'Standort teilen aktivieren?'
-              : 'Standort teilen deaktivieren?',
-        ),
-        content: Text(
-          enabling
-              ? 'Dein Standort wird mit deinen Notfallkontakten geteilt.'
-              : 'Dein Standort wird nicht mehr mit deinen Notfallkontakten geteilt.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Abbrechen'),
+    bool? confirmed;
+
+    if (enabling) {
+      // ignore: use_build_context_synchronously
+      confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Standort teilen aktivieren?'),
+          content: const Text(
+            'Dein Standort wird mit deinen Notfallkontakten geteilt.',
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(enabling ? 'Aktivieren' : 'Deaktivieren'),
-          ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Aktivieren'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // ignore: use_build_context_synchronously
+      confirmed = await _showDisableLocationSharingReflectionDialog(context);
+    }
 
     if (confirmed != true || !context.mounted) return;
 
@@ -202,21 +204,206 @@ class _HomeView extends StatelessWidget {
     }
   }
 
-  void _showRiskInfo(BuildContext context) {
-    showDialog<void>(
+  Future<bool?> _showDisableLocationSharingReflectionDialog(
+    BuildContext context,
+  ) async {
+    return showGeneralDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Gefahrenpotenzial'),
-        content: const Text(
-          'Dieser Wert beschreibt die aktuelle Risikoeinschätzung deines Umfelds. '
-          'Er kann sich durch Ort, Tageszeit und gemeldete Vorfälle ändern.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Schließen'),
+      barrierDismissible: true,
+      barrierLabel: 'Standortteile deaktivieren',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (ctx, animation1, animation2) {
+        return const _DisableLocationSharingReflectionDialog();
+      },
+    );
+  }
+}
+
+class _DisableLocationSharingReflectionDialog extends StatefulWidget {
+  // ignore: use_super_parameters
+  const _DisableLocationSharingReflectionDialog({Key? key}) : super(key: key);
+
+  @override
+  State<_DisableLocationSharingReflectionDialog> createState() =>
+      _DisableLocationSharingReflectionDialogState();
+}
+
+class _DisableLocationSharingReflectionDialogState
+    extends State<_DisableLocationSharingReflectionDialog> {
+  final TextEditingController _reflectionController = TextEditingController();
+
+  @override
+  void dispose() {
+    _reflectionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Standort teilen deaktivieren?',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF101818),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Bevor du die Freigabe beendest, nimm dir einen Moment, um zu reflektieren.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: Color(0xFF101818),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Divider(),
+                      Spacer(),
+                      const Text(
+                        'Hast du dich sicher gefühlt?',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF101818),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Woher kam das Gefühl von Sicherheit / Unsicherheit?',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF677575),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Hat das Teilen deines Standorts dein Sicherheitsempfinden beeinflusst?',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF677575),
+                        ),
+                      ),
+                      Spacer(),
+                      const Text(
+                        'Gab es (potenzielle) Gefahren auf deinem Weg?',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF101818),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Hast du dich durch SafeWalk besser / sicherer / besser vorbereitet gefühlt?',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF677575),
+                        ),
+                      ),
+                      Spacer(),
+                      const Text(
+                        'Wie könntest du deine Sicherheit in Zukunft verbessern?',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF101818),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Wir wollen dich darin bestärken, deine Sicherheit nicht von einer App abhängig zu machen, sondern selbstwirksam zu sein!',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF101818),
+                        ),
+                      ),
+                      /*Expanded(
+                        child: TextField(
+                          controller: _reflectionController,
+                          keyboardType: TextInputType.multiline,
+                          maxLines: null,
+                          decoration: InputDecoration(
+                            hintText:
+                                'Zum Beispiel: Ich möchte mich auf den nächsten Schritt konzentrieren ...',
+                            filled: true,
+                            fillColor: const Color(0xFFF3F4F6),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),*/
+                      Spacer(),
+                      Divider(),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Wenn du bereit bist, kannst du die Freigabe jetzt beenden.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.5,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: const Text('Abbrechen'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              child: const Text('Teilen deaktivieren'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

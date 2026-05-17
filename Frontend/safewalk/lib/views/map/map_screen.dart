@@ -252,15 +252,6 @@ class _MapScreenState extends State<MapScreen> {
         child: Stack(
           children: [
             Positioned.fill(child: _buildMap(vm)),
-            // SOS banner sits ABOVE the search bar so it's always the topmost
-            // navigation element when an alarm is active.
-            if (vm.hasActiveSos)
-              Positioned(
-                top: 4,
-                left: 16,
-                right: 16,
-                child: _buildSosBanner(vm),
-              ),
             Positioned(
               top: vm.hasActiveSos ? 76 : 8,
               left: 16,
@@ -415,7 +406,8 @@ class _MapScreenState extends State<MapScreen> {
 
     final vm = context.read<MapViewModel>();
 
-    // Priority: SOS alarms first, then live contacts, then community reports.
+    // Priority: SOS alarms first, then live contacts, then community reports,
+    // then layer entries, then search result.
     final tappedSos = _findNearestSos(
       vm.activeSosLocations,
       tappedLat,
@@ -455,6 +447,29 @@ class _MapScreenState extends State<MapScreen> {
     );
     if (tappedReport != null) {
       _showCommunityReportDetail(tappedReport);
+      return;
+    }
+
+    // Check for layer entries (street lamps, police, hospitals, etc.)
+    final tappedLayerEntry = _findNearestLayerEntry(
+      vm.visibleLayerEntries,
+      tappedLat,
+      tappedLng,
+    );
+    if (tappedLayerEntry != null) {
+      _showLayerEntryDetail(tappedLayerEntry);
+      return;
+    }
+
+    // Check for search result
+    if (vm.selectedSearchLocation != null) {
+      final searchDist = math.sqrt(
+        math.pow(tappedLat - vm.selectedSearchLocation!.latitude, 2) +
+            math.pow(tappedLng - vm.selectedSearchLocation!.longitude, 2),
+      );
+      if (searchDist < 0.0003) {
+        _showSearchResultDetail(vm);
+      }
     }
   }
 
@@ -464,7 +479,7 @@ class _MapScreenState extends State<MapScreen> {
     double lng,
   ) {
     if (contacts.isEmpty) return null;
-    const thresholdDeg = 0.0006;
+    const thresholdDeg = 0.0004;
     ContactLiveLocation? closest;
     double closestDist = double.infinity;
     for (final c in contacts) {
@@ -486,7 +501,7 @@ class _MapScreenState extends State<MapScreen> {
     double lng,
   ) {
     if (alarms.isEmpty) return null;
-    const thresholdDeg = 0.0008;
+    const thresholdDeg = 0.0005;
     ActiveSosLocation? closest;
     double closestDist = double.infinity;
     for (final s in alarms) {
@@ -509,7 +524,7 @@ class _MapScreenState extends State<MapScreen> {
   ) {
     if (reports.isEmpty) return null;
 
-    const thresholdDeg = 0.0005;
+    const thresholdDeg = 0.00035;
     CommunityReportItem? closest;
     double closestDist = double.infinity;
 
@@ -521,6 +536,30 @@ class _MapScreenState extends State<MapScreen> {
       if (dist < closestDist) {
         closestDist = dist;
         closest = report;
+      }
+    }
+    return closest;
+  }
+
+  MapLayerEntry? _findNearestLayerEntry(
+    List<MapLayerEntry> entries,
+    double lat,
+    double lng,
+  ) {
+    if (entries.isEmpty) return null;
+
+    const thresholdDeg = 0.00035;
+    MapLayerEntry? closest;
+    double closestDist = double.infinity;
+
+    for (final entry in entries) {
+      final dLat = (entry.lat - lat).abs();
+      final dLng = (entry.lng - lng).abs();
+      if (dLat > thresholdDeg || dLng > thresholdDeg) continue;
+      final dist = dLat * dLat + dLng * dLng;
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = entry;
       }
     }
     return closest;
@@ -774,7 +813,7 @@ class _MapScreenState extends State<MapScreen> {
             if (report.createdAt != null) ...[
               const SizedBox(height: 10),
               Text(
-                'Gemeldet am ${_formatDate(report.createdAt!)}',
+                'Community-Beitrag. Gemeldet am ${_formatDate(report.createdAt!)}',
                 style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
               ),
             ],
@@ -782,6 +821,125 @@ class _MapScreenState extends State<MapScreen> {
         ),
       ),
     );
+  }
+
+  void _showLayerEntryDetail(MapLayerEntry entry) {
+    if (!mounted) return;
+
+    final style = _layerVisualStyle(entry.layerKey);
+    final layerLabel = _getLayerLabel(entry.layerKey);
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(style.icon, color: style.color, size: 24),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    layerLabel,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Quelle: OpenStreetMap',
+              style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSearchResultDetail(MapViewModel vm) {
+    if (!mounted) return;
+
+    final title =
+        vm.selectedSearchSuggestion?.name ??
+        (vm.searchQuery.trim().isNotEmpty ? vm.searchQuery : 'Gesuchter Ort');
+    final subtitle = vm.selectedSearchSuggestion?.fullName ?? 'Suchergebnis';
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.place_rounded,
+                  color: Color(0xFF2563EB),
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getLayerLabel(String layerKey) {
+    switch (layerKey) {
+      case 'STREET_LAMP':
+        return 'Strassenlaterne';
+      case 'UNLIT_WAY':
+        return 'Unbeleuchtete Strecke';
+      case 'POLICE':
+        return 'Polizeiwache';
+      case 'HOSPITAL':
+        return 'Krankenhaus';
+      case 'CLINIC':
+        return 'Klinik';
+      case 'PHARMACY':
+        return 'Apotheke';
+      case 'FIRE_STATION':
+        return 'Feuerwache';
+      case 'EMERGENCY_PHONE':
+        return 'Notfalltelefon';
+      default:
+        return layerKey;
+    }
   }
 
   String _formatDate(String isoDate) {
@@ -1241,105 +1399,8 @@ class _MapScreenState extends State<MapScreen> {
     return byteData.buffer.asUint8List();
   }
 
-  Widget _buildSosBanner(MapViewModel vm) {
-    final alarms = vm.activeSosLocations;
-    if (alarms.isEmpty) return const SizedBox.shrink();
-
-    final primary = alarms.first;
-    final additional = alarms.length - 1;
-    final age = primary.ageFrom();
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => _focusOnSos(primary),
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.6, end: 1.0),
-          duration: const Duration(milliseconds: 600),
-          curve: Curves.easeInOut,
-          builder: (context, value, child) {
-            return Container(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              decoration: BoxDecoration(
-                color: Color.lerp(
-                  const Color(0xFFB91C1C),
-                  const Color(0xFFEF4444),
-                  value,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x55EF4444),
-                    blurRadius: 16,
-                    offset: Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: child,
-            );
-          },
-          child: Row(
-            children: [
-              const Icon(
-                Icons.priority_high_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      additional > 0
-                          ? 'SOS – ${primary.victimDisplayName} (+$additional weitere)'
-                          : 'SOS – ${primary.victimDisplayName}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Letztes Update vor ${_formatAge(age)}',
-                      style: const TextStyle(
-                        color: Color(0xFFFEE2E2),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.my_location_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _focusOnSos(ActiveSosLocation sos) async {
-    final map = _mapboxMap;
-    if (map == null) return;
-    await map.flyTo(
-      CameraOptions(
-        center: Point(coordinates: Position(sos.lng, sos.lat)),
-        zoom: 16,
-      ),
-      MapAnimationOptions(duration: 700),
-    );
-  }
-
   String _formatAge(Duration age) {
-    if (age.isNegative || age.inSeconds < 5) return 'jetzt';
+    if (age.isNegative || age.inSeconds < 5) return 'einem Moment';
     if (age.inSeconds < 60) return '${age.inSeconds} s';
     if (age.inMinutes < 60) return '${age.inMinutes} min';
     final hours = age.inHours;
@@ -1890,7 +1951,7 @@ class _ReportSheetState extends State<_ReportSheet> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Teile deine Erfahrung mit anderen',
+            'Teile deine Erfahrung mit anderen.',
             style: TextStyle(color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 14),
