@@ -155,5 +155,212 @@ void main() {
     expect(vm.contactLocations.map((c) => c.safeWalkId), ['fresh']);
     vm.stopSocialPolling();
   });
-}
 
+  test('submitReport rejects missing category', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+
+    final ok = await vm.submitReport(categoryKey: '');
+
+    expect(ok, isFalse);
+    expect(vm.errorMessage, 'Bitte waehle eine Kategorie aus.');
+  });
+
+  test('submitReport rejects missing location', () async {
+    GeolocatorPlatform.instance = FakeGeolocatorPlatform(serviceEnabled: false);
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+    await vm.initialize();
+    vm.setUseCurrentLocationForReport(true);
+
+    final ok = await vm.submitReport(categoryKey: 'UNSAFE_AREA');
+
+    expect(ok, isFalse);
+    expect(
+      vm.errorMessage,
+      'Keine gültige Position verfuegbar. Tippe auf die Karte oder nutze den aktuellen Standort.',
+    );
+    vm.stopSocialPolling();
+  });
+
+  test('recenterToUser returns null when location unavailable', () async {
+    GeolocatorPlatform.instance = FakeGeolocatorPlatform(serviceEnabled: false);
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+
+    final result = await vm.recenterToUser();
+
+    expect(result, isNull);
+    expect(
+      vm.errorMessage,
+      'Standort konnte nicht ermittelt werden. Bitte Berechtigungen pruefen.',
+    );
+  });
+
+  test('loadMapData warns on oversized viewport', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+    await vm.initialize();
+
+    await vm.loadMapData(
+      center: const LatLng(0, 0),
+      viewportBounds: const MapViewportBounds(
+        north: 80,
+        south: -80,
+        east: 170,
+        west: -170,
+      ),
+    );
+
+    expect(
+      vm.errorMessage,
+      'Kartenausschnitt zu gross. Bitte zoomen, um Daten zu laden.',
+    );
+    vm.stopSocialPolling();
+  });
+
+  test('setReportTapLocation toggles report pin state', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+
+    vm.setReportTapLocation(const LatLng(48.1, 11.6));
+
+    expect(vm.reportTapLocation, isNotNull);
+    expect(vm.useCurrentLocationForReport, isFalse);
+
+    vm.setUseCurrentLocationForReport(true);
+    expect(vm.reportTapLocation, isNull);
+  });
+
+  test('submitReport succeeds and clears report state', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+    await vm.initialize();
+
+    final ok = await vm.submitReport(
+      categoryKey: 'UNSAFE_AREA',
+      comment: 'Dark area',
+    );
+
+    expect(ok, isTrue);
+    expect(vm.successMessage, 'Meldung wurde erfolgreich übermittelt.');
+    expect(vm.reportTapLocation, isNull);
+    vm.stopSocialPolling();
+  });
+
+  test('submitReport surfaces backend error', () async {
+    final api = FakeApiService();
+    api.submitReportResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Meldung konnte nicht gesendet werden'},
+    );
+    final vm = MapViewModel(apiService: api);
+    await vm.initialize();
+
+    final ok = await vm.submitReport(
+      categoryKey: 'UNSAFE_AREA',
+      comment: 'Dark area',
+    );
+
+    expect(ok, isFalse);
+    expect(vm.errorMessage, 'Meldung konnte nicht gesendet werden');
+    vm.stopSocialPolling();
+  });
+
+  test('visibleLayerEntries and summaries reflect map data', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+    await vm.initialize();
+    await vm.loadMapData();
+
+    vm.toggleLayer('POLICE');
+
+    expect(vm.visibleLayerEntries, isNotEmpty);
+    expect(vm.activeViewSubtitle, contains('Einträge'));
+    vm.stopSocialPolling();
+  });
+
+  test('onCameraMoved updates center and zoom', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+
+    vm.onCameraMoved(const LatLng(1, 2), 12);
+
+    expect(vm.mapCenter.latitude, 1);
+    expect(vm.mapCenter.longitude, 2);
+    expect(vm.zoom, 12);
+  });
+
+  test('clearSearchSuggestions empties suggestions list', () {
+    final api = FakeApiService();
+    final fakeMapbox = FakeMapboxPlacesService(
+      results: const [
+        MapPlaceSuggestion(
+          name: 'Marienplatz',
+          fullName: 'Marienplatz, Muenchen',
+          lat: 48.137,
+          lng: 11.575,
+        ),
+      ],
+    );
+    final vm = MapViewModel(apiService: api, mapboxPlacesService: fakeMapbox);
+
+    fakeAsync((async) {
+      vm.setSearchQuery('Marien');
+      async.elapse(const Duration(milliseconds: 400));
+      async.flushMicrotasks();
+      expect(vm.searchSuggestions, isNotEmpty);
+
+      vm.clearSearchSuggestions();
+      expect(vm.searchSuggestions, isEmpty);
+    });
+  });
+
+  test('clearReportState resets report locations', () {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+
+    vm.setReportTapLocation(const LatLng(48.1, 11.6));
+    expect(vm.reportTapLocation, isNotNull);
+
+    vm.clearReportState();
+    expect(vm.reportTapLocation, isNull);
+  });
+
+  test('clearError and clearSuccess reset messages', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+    await vm.initialize();
+
+    api.submitReportResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Meldung konnte nicht gesendet werden'},
+    );
+    await vm.submitReport(categoryKey: 'UNSAFE_AREA');
+    expect(vm.errorMessage, isNotNull);
+    vm.clearError();
+    expect(vm.errorMessage, isNull);
+
+    api.submitReportResult = ApiResult.success(statusCode: 200);
+    await vm.submitReport(categoryKey: 'UNSAFE_AREA');
+    expect(vm.successMessage, isNotNull);
+    vm.clearSuccess();
+    expect(vm.successMessage, isNull);
+    vm.stopSocialPolling();
+  });
+
+  test('activeViewTitle reflects selected layers', () async {
+    final api = FakeApiService();
+    final vm = MapViewModel(apiService: api);
+    await vm.initialize();
+
+    vm.toggleLayer('UNLIT_WAY');
+    expect(vm.activeViewTitle, 'Strassenlaternen');
+
+    vm.toggleLayer('STREET_LAMP');
+    expect(vm.activeViewTitle, 'Keine Layer aktiv');
+    vm.stopSocialPolling();
+  });
+}

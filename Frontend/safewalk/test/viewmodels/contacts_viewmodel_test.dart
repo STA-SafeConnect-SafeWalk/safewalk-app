@@ -71,6 +71,20 @@ void main() {
     expect(vm.contacts.first.displayName, 'Jane');
   });
 
+  test('fetchContacts surfaces backend error', () async {
+    final api = FakeApiService();
+    api.getContactsResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Kontakte konnten nicht geladen werden'},
+    );
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.fetchContacts();
+
+    expect(vm.errorMessage, 'Kontakte konnten nicht geladen werden');
+  });
+
   test('toggleLocationSharing updates on success', () async {
     final api = FakeApiService();
     final vm = ContactsViewModel(apiService: api);
@@ -123,6 +137,31 @@ void main() {
     expect(vm.isCodeExpiringSoon, isFalse);
   });
 
+  test('fetchSharingCode ignores 404 as non-error', () async {
+    final api = FakeApiService();
+    api.getSharingCodeResult = ApiResult.error(statusCode: 404, message: 'Not found');
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.fetchSharingCode();
+
+    expect(vm.activeCode, isNull);
+    expect(vm.errorMessage, isNull);
+  });
+
+  test('generateCode surfaces backend error', () async {
+    final api = FakeApiService();
+    api.generateSharingCodeResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Code konnte nicht generiert werden'},
+    );
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.generateCode();
+
+    expect(vm.errorMessage, 'Code konnte nicht generiert werden');
+  });
+
   test('connectWithCode sets success message', () async {
     final api = FakeApiService();
     final vm = ContactsViewModel(apiService: api);
@@ -140,5 +179,84 @@ void main() {
 
     expect(vm.successMessage, 'Kontakt wurde ebenfalls zum Teilen hinzugefügt!');
   });
-}
 
+  test('toggleSosSharing updates on success', () async {
+    final api = FakeApiService();
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.fetchContacts();
+    final before = vm.contacts.first;
+
+    await vm.toggleSosSharing(before.contactId);
+
+    final updated = vm.contacts.first;
+    expect(updated.sosSharing, isTrue);
+  });
+
+  test('toggleSosSharing reverts on failure', () async {
+    final api = FakeApiService();
+    api.updateContactSettingsResult = ApiResult.error(
+      statusCode: 400,
+      message: 'Bad',
+      data: {'error': 'Fehler'},
+    );
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.fetchContacts();
+    final before = vm.contacts.first;
+
+    await vm.toggleSosSharing(before.contactId);
+
+    final updated = vm.contacts.first;
+    expect(updated.sosSharing, before.sosSharing);
+    expect(vm.errorMessage, 'Fehler');
+  });
+
+  test('toggleExpanded and sharing panel toggles update state', () async {
+    final api = FakeApiService();
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.fetchContacts();
+    final id = vm.contacts.first.contactId;
+
+    vm.toggleExpanded(id);
+    expect(vm.expandedContactId, id);
+
+    vm.toggleExpanded(id);
+    expect(vm.expandedContactId, isNull);
+
+    expect(vm.isSharingPanelOpen, isFalse);
+    vm.toggleSharingPanel();
+    expect(vm.isSharingPanelOpen, isTrue);
+  });
+
+  test('loadInitialData triggers contacts and sharing code', () async {
+    final api = FakeApiService();
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.loadInitialData();
+
+    expect(vm.contacts, isNotEmpty);
+    expect(vm.activeCode, 'ABC123');
+  });
+
+  test('clearError and clearSuccess reset messages', () async {
+    final api = FakeApiService();
+    final vm = ContactsViewModel(apiService: api);
+
+    await vm.connectWithCode('ABC123');
+    expect(vm.successMessage, isNotNull);
+    vm.clearSuccess();
+    expect(vm.successMessage, isNull);
+
+    api.getContactsResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Kontakte konnten nicht geladen werden'},
+    );
+    await vm.fetchContacts();
+    expect(vm.errorMessage, isNotNull);
+    vm.clearError();
+    expect(vm.errorMessage, isNull);
+  });
+}

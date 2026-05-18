@@ -53,6 +53,20 @@ void main() {
     expect(vm.successMessage, 'Anzeigename erfolgreich aktualisiert.');
   });
 
+  test('updateDisplayName surfaces backend error', () async {
+    final api = FakeApiService();
+    api.updateDisplayNameResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Speichern fehlgeschlagen'},
+    );
+    final vm = SettingsViewModel(apiService: api);
+
+    await vm.updateDisplayName('New Name');
+
+    expect(vm.errorMessage, 'Speichern fehlgeschlagen');
+  });
+
   test('deleteAccount sets isAccountDeleted', () async {
     final api = FakeApiService();
     final vm = SettingsViewModel(apiService: api);
@@ -61,5 +75,53 @@ void main() {
 
     expect(vm.isAccountDeleted, isTrue);
   });
-}
 
+  test('deleteAccount surfaces error on failure', () async {
+    final api = FakeApiService();
+    api.deleteAccountResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Konto konnte nicht gelöscht werden.'},
+    );
+    final vm = SettingsViewModel(apiService: api);
+
+    await vm.deleteAccount();
+
+    expect(vm.isAccountDeleted, isFalse);
+    expect(vm.errorMessage, 'Konto konnte nicht gelöscht werden.');
+  });
+
+  test('loadProfile surfaces backend error', () async {
+    final api = FakeApiService();
+    api.getMeResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Profil konnte nicht geladen werden'},
+    );
+    final vm = SettingsViewModel(apiService: api);
+
+    await vm.loadProfile();
+
+    expect(vm.errorMessage, 'Profil konnte nicht geladen werden');
+  });
+
+  test('clearError and clearSuccess reset messages', () async {
+    final api = FakeApiService();
+    final vm = SettingsViewModel(apiService: api);
+
+    await vm.updateDisplayName('New Name');
+    expect(vm.successMessage, isNotNull);
+    vm.clearSuccess();
+    expect(vm.successMessage, isNull);
+
+    api.updateDisplayNameResult = ApiResult.error(
+      statusCode: 500,
+      message: 'Error',
+      data: {'error': 'Speichern fehlgeschlagen'},
+    );
+    await vm.updateDisplayName('Another');
+    expect(vm.errorMessage, isNotNull);
+    vm.clearError();
+    expect(vm.errorMessage, isNull);
+  });
+}

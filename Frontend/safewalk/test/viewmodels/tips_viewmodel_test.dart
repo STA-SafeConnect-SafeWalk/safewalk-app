@@ -75,6 +75,73 @@ void main() {
     expect(vm.filteredTips.single.tipId, 't2');
   });
 
+  test('loadTips handles error response', () async {
+    final api = FakeApiService();
+    api.tipsResult = ApiResult.error(statusCode: 500, message: 'Error');
+    final vm = TipsViewModel(
+      apiService: api,
+      headphoneService: FakeHeadphoneService(),
+    );
+
+    await vm.loadTips();
+
+    expect(vm.errorMessage, isNotNull);
+    expect(vm.filteredTips, isEmpty);
+  });
+
+  test('setSelectedCategory updates when valid', () async {
+    final api = FakeApiService();
+    final vm = TipsViewModel(
+      apiService: api,
+      headphoneService: FakeHeadphoneService(),
+    );
+
+    await vm.loadTips();
+    vm.setSelectedCategory('Aufmerksamkeit');
+
+    expect(vm.selectedCategory, 'Aufmerksamkeit');
+  });
+
+  test('clearError resets error message', () async {
+    final api = FakeApiService();
+    api.tipsResult = ApiResult.error(statusCode: 500, message: 'Error');
+    final vm = TipsViewModel(
+      apiService: api,
+      headphoneService: FakeHeadphoneService(),
+    );
+
+    await vm.loadTips();
+    vm.clearError();
+
+    expect(vm.errorMessage, isNull);
+  });
+
+  test('search query trims whitespace', () async {
+    final api = FakeApiService();
+    final vm = TipsViewModel(
+      apiService: api,
+      headphoneService: FakeHeadphoneService(),
+    );
+
+    await vm.loadTips();
+    vm.setSearchQuery('  another  ');
+
+    expect(vm.searchQuery, 'another');
+    expect(vm.filteredTips.single.tipId, 't2');
+  });
+
+  test('showTipOfDayHighlighted true when all category selected', () async {
+    final api = FakeApiService();
+    final vm = TipsViewModel(
+      apiService: api,
+      headphoneService: FakeHeadphoneService(),
+    );
+
+    await vm.loadTips();
+
+    expect(vm.showTipOfDayHighlighted, isTrue);
+  });
+
   test('headphone tip matches required shape', () {
     const tip = TipsViewModel.headphoneTip;
 
@@ -83,4 +150,3 @@ void main() {
     expect(tip.category, 'Aufmerksamkeit');
   });
 }
-

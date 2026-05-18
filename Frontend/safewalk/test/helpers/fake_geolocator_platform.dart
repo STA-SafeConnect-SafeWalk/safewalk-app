@@ -5,6 +5,8 @@ class FakeGeolocatorPlatform extends GeolocatorPlatform {
   FakeGeolocatorPlatform({
     this.serviceEnabled = true,
     this.permission = LocationPermission.always,
+    this.throwOnPosition = false,
+    this.throwOnLastKnown = false,
     Position? position,
     Position? lastKnownPosition,
   }) : _position = position,
@@ -12,6 +14,8 @@ class FakeGeolocatorPlatform extends GeolocatorPlatform {
 
   bool serviceEnabled;
   LocationPermission permission;
+  bool throwOnPosition;
+  bool throwOnLastKnown;
   Position? _position;
   Position? _lastKnownPosition;
 
@@ -29,11 +33,17 @@ class FakeGeolocatorPlatform extends GeolocatorPlatform {
 
   @override
   Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async {
+    if (throwOnPosition) {
+      throw Exception('Position error');
+    }
     return _position ?? _fallbackPosition();
   }
 
   @override
   Future<Position?> getLastKnownPosition({bool forceLocationManager = false}) async {
+    if (throwOnLastKnown) {
+      throw Exception('Last known error');
+    }
     return _lastKnownPosition;
   }
 

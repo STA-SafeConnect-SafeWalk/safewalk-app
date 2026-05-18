@@ -66,5 +66,34 @@ void main() {
     expect(active, isNotNull);
     expect(active!.sosId, 's1');
   });
-}
 
+  test('MapLayerMetadata copyWith updates selection', () {
+    const layer = MapLayerMetadata(
+      key: 'POLICE',
+      label: 'Police',
+      iconKey: 'police',
+      isSelected: false,
+    );
+
+    final updated = layer.copyWith(isSelected: true);
+
+    expect(updated.isSelected, isTrue);
+    expect(updated.key, 'POLICE');
+  });
+
+  test('ContactLiveLocation ageFrom returns duration', () {
+    final now = DateTime.now();
+    final loc = ContactLiveLocation(
+      safeWalkId: 'sw1',
+      displayName: 'Jane',
+      lat: 48.1,
+      lng: 11.6,
+      accuracy: 5,
+      updatedAt: now.subtract(const Duration(seconds: 5)),
+    );
+
+    final age = loc.ageFrom(now);
+
+    expect(age.inSeconds, 5);
+  });
+}

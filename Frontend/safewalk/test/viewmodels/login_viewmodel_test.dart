@@ -130,6 +130,22 @@ void main() {
     expect(vm.authMode, AuthMode.confirmSignUp);
   });
 
+  test('signUp failure shows error message', () async {
+    final auth = FakeAuthService();
+    final api = FakeApiService(authService: auth);
+    api.signUpResult = ApiResult.error(
+      statusCode: 400,
+      message: 'Bad',
+      data: {'error': 'Registrierung fehlgeschlagen'},
+    );
+    final vm = LoginViewModel(apiService: api);
+
+    await vm.signUp('new@example.com', 'password');
+
+    expect(vm.statusMessage, 'Registrierung fehlgeschlagen');
+    expect(vm.authMode, AuthMode.signIn);
+  });
+
   test('confirmSignUp success switches to sign-in', () async {
     final auth = FakeAuthService();
     final api = FakeApiService(authService: auth);
@@ -138,6 +154,37 @@ void main() {
     await vm.confirmSignUp('new@example.com', '123456');
 
     expect(vm.authMode, AuthMode.signIn);
+  });
+
+  test('forgotPassword success moves to confirm reset mode', () async {
+    final auth = FakeAuthService();
+    final api = FakeApiService(authService: auth);
+    final vm = LoginViewModel(apiService: api);
+
+    await vm.forgotPassword('user@example.com');
+
+    expect(vm.authMode, AuthMode.confirmForgotPassword);
+  });
+
+  test('confirmForgotPassword success returns to sign-in', () async {
+    final auth = FakeAuthService();
+    final api = FakeApiService(authService: auth);
+    final vm = LoginViewModel(apiService: api);
+
+    await vm.confirmForgotPassword('user@example.com', '123456', 'newpass');
+
+    expect(vm.authMode, AuthMode.signIn);
+  });
+
+  test('first login registers profile after confirmation', () async {
+    final auth = FakeAuthService();
+    final api = FakeApiService(authService: auth);
+    final vm = LoginViewModel(apiService: api);
+
+    await vm.confirmSignUp('new@example.com', '123456');
+    await vm.signIn('new@example.com', 'password');
+
+    expect(api.registerProfileCalled, isTrue);
   });
 
   test('tryRestoreSession authenticates with valid tokens', () async {
@@ -150,6 +197,18 @@ void main() {
     await vm.tryRestoreSession();
 
     expect(vm.isAuthenticated, isTrue);
+  });
+
+  test('tryRestoreSession clears tokens on refresh failure', () async {
+    final auth = FakeAuthService(hasTokensValue: true);
+    final api = FakeApiService(authService: auth);
+    api.refreshTokensResult = ApiResult.error(statusCode: 401, message: 'Expired');
+    final vm = LoginViewModel(apiService: api);
+
+    await vm.tryRestoreSession();
+
+    expect(vm.isAuthenticated, isFalse);
+    expect(auth.cleared, isTrue);
   });
 
   test('signOut resets state and unregisters device', () async {
@@ -165,5 +224,33 @@ void main() {
     expect(vm.authMode, AuthMode.signIn);
     expect(push.unregisterCalls, 1);
   });
-}
 
+  test('toggleMode switches between sign-in and sign-up', () {
+    final auth = FakeAuthService();
+    final api = FakeApiService(authService: auth);
+    final vm = LoginViewModel(apiService: api);
+
+    expect(vm.authMode, AuthMode.signIn);
+    vm.toggleMode();
+    expect(vm.authMode, AuthMode.signUp);
+    vm.toggleMode();
+    expect(vm.authMode, AuthMode.signIn);
+  });
+
+  test('switchMode clears status message', () async {
+    final auth = FakeAuthService();
+    final api = FakeApiService(authService: auth);
+    api.signInResult = ApiResult.error(
+      statusCode: 401,
+      message: 'Failed',
+      data: {'error': 'Ungültige Daten'},
+    );
+    final vm = LoginViewModel(apiService: api);
+
+    await vm.signIn('user@example.com', 'password');
+    expect(vm.statusMessage, isNotEmpty);
+
+    vm.switchMode(AuthMode.signUp);
+    expect(vm.statusMessage, isEmpty);
+  });
+}

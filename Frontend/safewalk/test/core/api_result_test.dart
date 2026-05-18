@@ -18,5 +18,11 @@ void main() {
     expect(result.statusCode, 500);
     expect(result.message, 'Boom');
   });
-}
 
+  test('ApiResult.toString includes status and message', () {
+    final result = ApiResult.error(statusCode: 404, message: 'Not found');
+
+    expect(result.toString(), contains('statusCode: 404'));
+    expect(result.toString(), contains('Not found'));
+  });
+}
