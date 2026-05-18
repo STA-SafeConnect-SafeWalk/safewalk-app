@@ -817,6 +817,7 @@ class _MapScreenState extends State<MapScreen> {
                 style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
               ),
             ],
+            const SizedBox(height: 32),
           ],
         ),
       ),

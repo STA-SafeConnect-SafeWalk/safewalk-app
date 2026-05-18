@@ -95,7 +95,10 @@ class MapViewModel extends ChangeNotifier {
   /// User-report categories. Keys must match the `type` values accepted by
   /// the backend `POST /map-data/reports` endpoint.
   static const _availableReportCategories = <MapReportCategoryMetadata>[
-    MapReportCategoryMetadata(key: 'UNSAFE_AREA', label: 'Unsicherer Bereich'),
+    MapReportCategoryMetadata(
+      key: 'UNSAFE_AREA',
+      label: 'Potenziell gefährlicher Bereich',
+    ),
     MapReportCategoryMetadata(key: 'WELL_LIT_WAY', label: 'Gut beleuchtet'),
     MapReportCategoryMetadata(key: 'UNLIT_WAY', label: 'Schlecht beleuchtet'),
     MapReportCategoryMetadata(
