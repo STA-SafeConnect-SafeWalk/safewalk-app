@@ -24,6 +24,13 @@ runs:
       with:
         channel: stable
 
+    - name: Verify toolchain
+      working-directory: Frontend/safewalk
+      shell: bash
+      run: |
+        java -version
+        flutter --version
+
     - name: Prepare Firebase env
       working-directory: Frontend/safewalk
       env:
@@ -31,6 +38,10 @@ runs:
         GOOGLE_SERVICES_JSON: ${{ inputs.google-services-json }}
       shell: bash
       run: |
+        if [ ! -d "android/app" ]; then
+          echo "android/app directory is missing. Ensure Flutter project is checked out correctly." >&2
+          exit 1
+        fi
         if [ -z "$FIREBASE_ENV_JSON" ]; then
           echo "FIREBASE_ENV_JSON secret is missing" >&2
           exit 1
@@ -42,7 +53,7 @@ runs:
           exit 1
         fi
         echo "$GOOGLE_SERVICES_JSON" > google-services.json
-        mv google-services.json Frontend/safewalk/android/app/
+        mv google-services.json android/app/
 
     - name: Install dependencies
       working-directory: Frontend/safewalk
