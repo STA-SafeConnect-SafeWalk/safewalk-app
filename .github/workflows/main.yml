@@ -160,6 +160,18 @@ jobs:
             exit 1
           fi
 
+  build-android:
+    name: Build Android APK
+    needs: test-frontend
+    if: needs.test-frontend.result == 'success' && needs.detect-frontend-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build Android APK
+        uses: ./.github/workflows/actions/android-release
+
   deploy-infra:
     name: Deploy Infrastructure
     needs: [detect-backend-changes, test-backend]
