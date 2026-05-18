@@ -386,6 +386,14 @@ class _TipIcon extends StatelessWidget {
         return Icons.sports_martial_arts_outlined;
       case 'help':
         return Icons.help_outline;
+      case 'visibility_off':
+        return Icons.visibility_off_outlined;
+      case 'group':
+        return Icons.group_outlined;
+      case 'timer':
+        return Icons.timer_outlined;
+      case 'place':
+        return Icons.place_outlined;
       default:
         return Icons.tips_and_updates_outlined;
     }
