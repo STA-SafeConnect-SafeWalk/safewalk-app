@@ -173,6 +173,7 @@ jobs:
         uses: ./.github/workflows/actions/android-release
         with:
           firebase-env-json: ${{ secrets.FIREBASE_ENV_JSON }}
+          google-services-json: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
   deploy-infra:
     name: Deploy Infrastructure

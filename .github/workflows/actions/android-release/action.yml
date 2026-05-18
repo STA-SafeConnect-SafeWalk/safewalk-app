@@ -4,6 +4,8 @@ description: Build Android APK for release
 inputs:
   firebase-env-json:
     required: true
+  google-services-json:
+    required: true
 
 runs:
   using: composite
@@ -26,6 +28,7 @@ runs:
       working-directory: Frontend/safewalk
       env:
         FIREBASE_ENV_JSON: ${{ inputs.firebase-env-json }}
+        GOOGLE_SERVICES_JSON: ${{ inputs.google-services-json }}
       shell: bash
       run: |
         if [ -z "$FIREBASE_ENV_JSON" ]; then
@@ -33,6 +36,13 @@ runs:
           exit 1
         fi
         echo "$FIREBASE_ENV_JSON" > firebase.env.json
+        
+        if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+          echo "GOOGLE_SERVICES_JSON secret is missing" >&2
+          exit 1
+        fi
+        echo "$GOOGLE_SERVICES_JSON" > google-services.json
+        mv google-services.json Frontend/safewalk/android/app/
 
     - name: Install dependencies
       working-directory: Frontend/safewalk
