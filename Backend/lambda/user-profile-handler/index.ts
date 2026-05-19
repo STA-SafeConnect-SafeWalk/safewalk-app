@@ -390,18 +390,37 @@ async function handleDeleteMe(
   if (!userPoolId) return missingEnvResponse('COGNITO_USER_POOL_ID');
 
   let email: string | undefined;
+  let safeWalkId: string | undefined;
   try {
     const result = await docClient.send(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
     if (!result.Item) return jsonResponse(404, { error: 'Benutzerprofil nicht gefunden' });
     email = result.Item.email as string | undefined;
+    safeWalkId = result.Item.safeWalkId as string | undefined;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return jsonResponse(500, {
       error: 'Benutzerprofil konnte nicht abgerufen werden',
       details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
+  }
+
+  // Delete the user from the platform and all trusted contact relationships
+  // (best-effort: platform cleanup should not block local deletion)
+  const platformBaseDomain = getEnv('PLATFORM_DOMAIN');
+  const apiKey = getEnv('API_KEY');
+  if (safeWalkId && platformBaseDomain && apiKey) {
+    try {
+      await sendRequest<{ success: boolean }>(
+        `${platformBaseDomain}/users/${encodeURIComponent(safeWalkId)}`,
+        'DELETE',
+        apiKey,
+      );
+      console.log('Platform user and contacts deleted for safeWalkId:', safeWalkId);
+    } catch (error) {
+      console.error('Error deleting platform user (non-fatal, continuing with local deletion):', error);
+    }
   }
 
   // Delete the app profile from DynamoDB

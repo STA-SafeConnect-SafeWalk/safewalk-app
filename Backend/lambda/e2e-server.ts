@@ -407,6 +407,22 @@ function startPlatformServer(): Promise<number> {
           return json(200, { success: true });
         }
 
+        // DELETE /users/:safeWalkId — delete platform user and all contact relationships
+        const usersDeleteMatch = url.match(/^\/users\/([^/]+)$/);
+        if (method === 'DELETE' && usersDeleteMatch) {
+          const safeWalkId = decodeURIComponent(usersDeleteMatch[1]);
+          // Remove all contacts where the user is a participant
+          const contactIdsToRemove = [...platformContacts.values()]
+            .filter(c => c.requesterSafeWalkId === safeWalkId || c.targetSafeWalkId === safeWalkId)
+            .map(c => c.contactId);
+          for (const cid of contactIdsToRemove) {
+            platformContacts.delete(cid);
+          }
+          // Remove the platform user
+          platformUsers.delete(safeWalkId);
+          return json(200, { success: true, data: { deletedContacts: contactIdsToRemove.length } });
+        }
+
         // POST /sos — SOS creation (safeconnect platform side)
         if (method === 'POST' && url === '/sos') {
           const sosId = `psos-${Date.now()}`;

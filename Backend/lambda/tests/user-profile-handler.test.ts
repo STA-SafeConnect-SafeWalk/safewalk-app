@@ -596,12 +596,44 @@ describe('user-profile-handler', () => {
       expect(res.statusCode).toBe(404);
     });
 
-    it('returns 204 and deletes user from DynamoDB and Cognito', async () => {
+    it('returns 204 and deletes user from DynamoDB, Cognito, and platform', async () => {
       ddbMock
         .on(GetCommand)
-        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com' } });
+        .resolves({
+          Item: {
+            safeWalkAppId: 'cognito-user-123',
+            email: 'alice@test.com',
+            safeWalkId: 'sw-alice-123',
+          },
+        });
       ddbMock.on(DeleteCommand).resolves({});
       cognitoMock.on(AdminDeleteUserCommand).resolves({});
+      setupHttpsMock(200, { success: true, data: { deletedContacts: 2 } });
+
+      const res = await handler(makeEvent('DELETE /me'));
+      expect(res.statusCode).toBe(204);
+
+      // Verify the platform DELETE request was made with the correct URL
+      const callArgs = mockHttpsRequest.mock.calls[0];
+      expect(callArgs[0]).toMatchObject({
+        method: 'DELETE',
+        path: '/users/sw-alice-123',
+      });
+    });
+
+    it('returns 204 when platform deletion fails (non-fatal)', async () => {
+      ddbMock
+        .on(GetCommand)
+        .resolves({
+          Item: {
+            safeWalkAppId: 'cognito-user-123',
+            email: 'alice@test.com',
+            safeWalkId: 'sw-alice-123',
+          },
+        });
+      ddbMock.on(DeleteCommand).resolves({});
+      cognitoMock.on(AdminDeleteUserCommand).resolves({});
+      setupHttpsMock(502, { success: false, error: 'platform error' });
 
       const res = await handler(makeEvent('DELETE /me'));
       expect(res.statusCode).toBe(204);
@@ -610,12 +642,33 @@ describe('user-profile-handler', () => {
     it('returns 204 even when Cognito delete fails (non-fatal)', async () => {
       ddbMock
         .on(GetCommand)
-        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com' } });
+        .resolves({
+          Item: {
+            safeWalkAppId: 'cognito-user-123',
+            email: 'alice@test.com',
+            safeWalkId: 'sw-alice-123',
+          },
+        });
       ddbMock.on(DeleteCommand).resolves({});
       cognitoMock.on(AdminDeleteUserCommand).rejects(new Error('Cognito error'));
+      setupHttpsMock(200, { success: true, data: { deletedContacts: 0 } });
 
       const res = await handler(makeEvent('DELETE /me'));
       expect(res.statusCode).toBe(204);
+    });
+
+    it('returns 204 when user has no platform registration', async () => {
+      ddbMock
+        .on(GetCommand)
+        .resolves({ Item: { safeWalkAppId: 'cognito-user-123', email: 'alice@test.com' } });
+      ddbMock.on(DeleteCommand).resolves({});
+      cognitoMock.on(AdminDeleteUserCommand).resolves({});
+
+      const res = await handler(makeEvent('DELETE /me'));
+      expect(res.statusCode).toBe(204);
+
+      // No platform call should be made when there is no safeWalkId
+      expect(mockHttpsRequest).not.toHaveBeenCalled();
     });
 
     it('returns 500 when DynamoDB delete fails', async () => {
