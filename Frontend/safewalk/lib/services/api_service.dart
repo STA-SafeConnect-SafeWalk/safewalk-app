@@ -330,8 +330,17 @@ class ApiService {
   }
 
   /// Fetches all trusted contacts for the logged-in user.
+  ///
+  /// A cache-busting query parameter is appended so that intermediate caches
+  /// (CDN, API Gateway, platform HTTP cache) never return stale contact data
+  /// after a sharing toggle has been updated via PATCH.
   Future<ApiResult> getContacts() async {
-    return _authenticatedRequest(() => _client.get(ApiConstants.contacts));
+    return _authenticatedRequest(
+      () => _client.get(
+        ApiConstants.contacts,
+        queryParameters: {'_': DateTime.now().millisecondsSinceEpoch.toString()},
+      ),
+    );
   }
 
   /// Fetches the tip of the day and all additional tips.

@@ -41,6 +41,10 @@ class ApiClient {
   ///
   /// Optional [headers] are merged with the default JSON headers.
   /// Optional [queryParameters] are appended to the URL.
+  ///
+  /// Cache-control headers are included by default to prevent intermediate
+  /// layers (CDN, API Gateway, platform HTTP cache) from returning stale
+  /// responses.
   Future<ApiResult> get(
     String endpoint, {
     Map<String, String>? headers,
@@ -52,8 +56,11 @@ class ApiClient {
 
     try {
       final uri = _buildUri(endpoint, queryParameters);
+      final mergedHeaders = _buildHeaders(headers);
+      mergedHeaders['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+      mergedHeaders['Pragma'] = 'no-cache';
       final response = await effectiveClient
-          .get(uri, headers: _buildHeaders(headers))
+          .get(uri, headers: mergedHeaders)
           .timeout(timeout);
       return _handleResponse(response);
     } catch (e) {
