@@ -68,84 +68,87 @@ class _HomeView extends StatelessWidget {
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            children: [
-              const Text(
-                'SafeWalk',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: _kPurpleText,
-                ),
-              ),
-              Spacer(),
-              _HeadphoneChip(visible: headphonesOn),
-              const Text(
-                'Dein\nSicherheits-Begleiter',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _kPurpleText,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                  height: 1.2,
-                ),
-              ),
-              Spacer(),
-              _HomeSosButton(onTap: vm.startCountdown),
-              const SizedBox(height: 24),
-              const Text(
-                'SOS Notfall',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: _kPurpleText,
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 18),
-                child: Text(
-                  'Drücke den SOS Knopf, um den Alarm auszulösen. Du kannst den Alarm innerhalb von 5 Sekunden abbrechen.',
-                  textAlign: TextAlign.center,
+          child: _ScaleToFitHeight(
+            minHeight: 700,
+            child: Column(
+              children: [
+                const Text(
+                  'SafeWalk',
                   style: TextStyle(
-                    fontSize: 13,
-                    height: 1.4,
-                    color: Color(0x99362B3E),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: _kPurpleText,
                   ),
                 ),
-              ),
-              Spacer(flex: 2),
-              _ShareStatusCard(
-                title: statusTitle,
-                subtitle: vm.bottomInfoText,
-                liveEnabled: vm.isSharingLocation,
-                isLoading: vm.isTogglingLocationSharing,
-                onTap: vm.isTogglingLocationSharing
-                    ? null
-                    : () => _confirmToggleLocationSharing(context, vm),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 36,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                Spacer(),
+                _HeadphoneChip(visible: headphonesOn),
+                const Text(
+                  'Dein\nSicherheits-Begleiter',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _kPurpleText,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+                Spacer(),
+                _HomeSosButton(onTap: vm.startCountdown),
+                const SizedBox(height: 24),
+                const Text(
+                  'SOS Notfall',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: _kPurpleText,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 18),
                   child: Text(
-                    footerText,
+                    'Drücke den SOS Knopf, um den Alarm auszulösen. Du kannst den Alarm innerhalb von 5 Sekunden abbrechen.',
                     textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12,
-                      height: 1.42,
-                      color: vm.locationError != null
-                          ? const Color(0xFFB00020)
-                          : const Color(0x99362B3E),
+                      fontSize: 13,
+                      height: 1.4,
+                      color: Color(0x99362B3E),
                     ),
                   ),
                 ),
-              ),
-              Spacer(),
-            ],
+                Spacer(flex: 2),
+                _ShareStatusCard(
+                  title: statusTitle,
+                  subtitle: vm.bottomInfoText,
+                  liveEnabled: vm.isSharingLocation,
+                  isLoading: vm.isTogglingLocationSharing,
+                  onTap: vm.isTogglingLocationSharing
+                      ? null
+                      : () => _confirmToggleLocationSharing(context, vm),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 36,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      footerText,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.42,
+                        color: vm.locationError != null
+                            ? const Color(0xFFB00020)
+                            : const Color(0x99362B3E),
+                      ),
+                    ),
+                  ),
+                ),
+                Spacer(),
+              ],
+            ),
           ),
         ),
       ),
@@ -427,63 +430,66 @@ class _CountdownView extends StatelessWidget {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-              child: Column(
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _GpsStatusPill(isActive: vm.isGpsActive),
-                  ),
-                  const Spacer(),
-                  const Text(
-                    'Alarm wird\nausgelöst...',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      height: 1.25,
-                      fontWeight: FontWeight.w800,
+              child: _ScaleToFitHeight(
+                minHeight: 670,
+                child: Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _GpsStatusPill(isActive: vm.isGpsActive),
                     ),
-                  ),
-                  const SizedBox(height: 28),
-                  _CountdownCircle(
-                    progress: vm.countdownProgress,
-                    remainingLabel: '${seconds}s',
-                  ),
-                  const SizedBox(height: 24),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      'Du kannst den Alarm innerhalb des Timers noch abbrechen.',
+                    const Spacer(),
+                    const Text(
+                      'Alarm wird\nausgelöst...',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: 14,
-                        height: 1.42,
-                        color: Color(0xE6FFFFFF),
+                        color: Colors.white,
+                        fontSize: 28,
+                        height: 1.25,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  _SwipeToConfirmSlider(
-                    label: 'STREICHEN ZUM ABBRECHEN',
-                    knobColor: Colors.white,
-                    trackColor: const Color(0x1AFFFFFF),
-                    textColor: const Color(0x99FFFFFF),
-                    arrowColor: _kTeal,
-                    onCompleted: vm.cancelCountdownAndReturnHome,
-                  ),
-                  const SizedBox(height: 16),
-                  _CountdownSkipButton(
-                    isLoading: vm.isSubmittingSos,
-                    onPressed: vm.isSubmittingSos
-                        ? null
-                        : vm.skipCountdownTimer,
-                  ),
-                  const SizedBox(height: 16),
-                  _LocationMeta(
-                    text: vm.sosError ?? vm.bottomInfoText,
-                    isError: vm.sosError != null || vm.locationError != null,
-                  ),
-                ],
+                    const SizedBox(height: 28),
+                    _CountdownCircle(
+                      progress: vm.countdownProgress,
+                      remainingLabel: '${seconds}s',
+                    ),
+                    const SizedBox(height: 24),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'Du kannst den Alarm innerhalb des Timers noch abbrechen.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.42,
+                          color: Color(0xE6FFFFFF),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    _SwipeToConfirmSlider(
+                      label: 'STREICHEN ZUM ABBRECHEN',
+                      knobColor: Colors.white,
+                      trackColor: const Color(0x1AFFFFFF),
+                      textColor: const Color(0x99FFFFFF),
+                      arrowColor: _kTeal,
+                      onCompleted: vm.cancelCountdownAndReturnHome,
+                    ),
+                    const SizedBox(height: 16),
+                    _CountdownSkipButton(
+                      isLoading: vm.isSubmittingSos,
+                      onPressed: vm.isSubmittingSos
+                          ? null
+                          : vm.skipCountdownTimer,
+                    ),
+                    const SizedBox(height: 16),
+                    _LocationMeta(
+                      text: vm.sosError ?? vm.bottomInfoText,
+                      isError: vm.sosError != null || vm.locationError != null,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -509,68 +515,114 @@ class _ActiveSosView extends StatelessWidget {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 33),
-              child: Column(
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _GpsStatusPill(isActive: vm.isGpsActive),
-                  ),
-                  const Spacer(),
-                  const Text(
-                    'Alarm ausgelöst!',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      height: 1.25,
-                      fontWeight: FontWeight.w800,
+              child: _ScaleToFitHeight(
+                minHeight: 650,
+                child: Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _GpsStatusPill(isActive: vm.isGpsActive),
                     ),
-                  ),
-                  const SizedBox(height: 34),
-                  const _ActiveSosCircle(),
-                  const SizedBox(height: 31),
-                  const Text(
-                    'Notfallkontakte\nbenachrichtigt',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      height: 1.25,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      'Deine Notfallkontakte haben eine Push-Benachrichtigung erhalten.',
-                      textAlign: TextAlign.center,
+                    const Spacer(),
+                    const Text(
+                      'Alarm ausgelöst!',
                       style: TextStyle(
-                        fontSize: 14,
-                        height: 1.42,
-                        color: Color(0xE6FFFFFF),
+                        color: Colors.white,
+                        fontSize: 28,
+                        height: 1.25,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  _SwipeToConfirmSlider(
-                    label: 'STREICHEN ZUM ABBRECHEN',
-                    knobColor: Colors.white,
-                    trackColor: const Color(0x1AFFFFFF),
-                    textColor: const Color(0x99FFFFFF),
-                    arrowColor: _kTeal,
-                    onCompleted: vm.cancelActiveSos,
-                  ),
-                  const SizedBox(height: 24),
-                  _LocationMeta(
-                    text: vm.sosError ?? vm.bottomInfoText,
-                    isError: vm.sosError != null || vm.locationError != null,
-                  ),
-                ],
+                    const SizedBox(height: 34),
+                    const _ActiveSosCircle(),
+                    const SizedBox(height: 31),
+                    const Text(
+                      'Notfallkontakte\nbenachrichtigt',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        height: 1.25,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'Deine Notfallkontakte haben eine Push-Benachrichtigung erhalten.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.42,
+                          color: Color(0xE6FFFFFF),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    _SwipeToConfirmSlider(
+                      label: 'STREICHEN ZUM ABBRECHEN',
+                      knobColor: Colors.white,
+                      trackColor: const Color(0x1AFFFFFF),
+                      textColor: const Color(0x99FFFFFF),
+                      arrowColor: _kTeal,
+                      onCompleted: vm.cancelActiveSos,
+                    ),
+                    const SizedBox(height: 24),
+                    _LocationMeta(
+                      text: vm.sosError ?? vm.bottomInfoText,
+                      isError: vm.sosError != null || vm.locationError != null,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ScaleToFitHeight extends StatelessWidget {
+  const _ScaleToFitHeight({required this.minHeight, required this.child});
+
+  final double minHeight;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!constraints.hasBoundedHeight) return child;
+
+        final width = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        final height = constraints.maxHeight;
+        final scale = math.min(1.0, height / minHeight);
+
+        if (scale >= 1) return child;
+
+        return ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            minWidth: width / scale,
+            maxWidth: width / scale,
+            minHeight: minHeight,
+            maxHeight: minHeight,
+            child: Transform.scale(
+              scale: scale,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: width / scale,
+                height: minHeight,
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

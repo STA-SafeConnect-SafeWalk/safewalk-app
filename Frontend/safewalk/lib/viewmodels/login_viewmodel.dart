@@ -271,10 +271,4 @@ class LoginViewModel extends ChangeNotifier {
       await _apiService.authService.clearTokens();
     }
   }
-
-  /// Skips authentication (for development / testing purposes).
-  void skipLogin() {
-    _isAuthenticated = true;
-    notifyListeners();
-  }
 }

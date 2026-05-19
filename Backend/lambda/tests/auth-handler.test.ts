@@ -135,14 +135,14 @@ describe('auth-handler', () => {
       cognitoMock.on(ConfirmSignUpCommand).rejects(new CodeMismatchException({ message: 'mismatch', $metadata: {} }));
       const res = await handler(makeEvent('POST /auth/confirm', { email: 'user@test.com', confirmationCode: 'wrong' }));
       expect(res.statusCode).toBe(400);
-      expect(JSON.parse(res.body).error).toMatch(/confirmation code/i);
+      expect(JSON.parse(res.body).error).toMatch(/bestaetigungscode/i);
     });
 
     it('returns 400 for ExpiredCodeException', async () => {
       cognitoMock.on(ConfirmSignUpCommand).rejects(new ExpiredCodeException({ message: 'expired', $metadata: {} }));
       const res = await handler(makeEvent('POST /auth/confirm', { email: 'user@test.com', confirmationCode: 'old' }));
       expect(res.statusCode).toBe(400);
-      expect(JSON.parse(res.body).error).toMatch(/expired/i);
+      expect(JSON.parse(res.body).error).toMatch(/abgelaufen/i);
     });
   });
 

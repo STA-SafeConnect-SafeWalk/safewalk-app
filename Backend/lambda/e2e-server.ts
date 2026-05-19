@@ -252,7 +252,7 @@ const cognitoMock = mockClient(CognitoIdentityProviderClient);
 
 cognitoMock.on(SignUpCommand).callsFake((input: any) => {
   if (cognitoUsers.has(input.Username)) {
-    throw new UsernameExistsException({ message: 'An account with this email already exists', $metadata: {} });
+    throw new UsernameExistsException({ message: 'Ein Konto mit dieser E-Mail existiert bereits', $metadata: {} });
   }
   const sub = `sub-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const nameAttr = (input.UserAttributes ?? []).find((a: any) => a.Name === 'name');
@@ -262,8 +262,8 @@ cognitoMock.on(SignUpCommand).callsFake((input: any) => {
 
 cognitoMock.on(ConfirmSignUpCommand).callsFake((input: any) => {
   const user = cognitoUsers.get(input.Username);
-  if (!user) throw new UserNotFoundException({ message: 'User not found', $metadata: {} });
-  if (input.ConfirmationCode !== '123456') throw new CodeMismatchException({ message: 'Invalid confirmation code', $metadata: {} });
+  if (!user) throw new UserNotFoundException({ message: 'Benutzer nicht gefunden', $metadata: {} });
+  if (input.ConfirmationCode !== '123456') throw new CodeMismatchException({ message: 'Ungueltiger Bestaetigungscode', $metadata: {} });
   user.confirmed = true;
   return {};
 });
@@ -271,9 +271,9 @@ cognitoMock.on(ConfirmSignUpCommand).callsFake((input: any) => {
 cognitoMock.on(InitiateAuthCommand).callsFake((input: any) => {
   if (input.AuthFlow === 'USER_PASSWORD_AUTH') {
     const user = cognitoUsers.get(input.AuthParameters?.USERNAME);
-    if (!user) throw new UserNotFoundException({ message: 'User not found', $metadata: {} });
-    if (user.password !== input.AuthParameters?.PASSWORD) throw new NotAuthorizedException({ message: 'Incorrect email or password', $metadata: {} });
-    if (!user.confirmed) throw new NotAuthorizedException({ message: 'User is not confirmed', $metadata: {} });
+    if (!user) throw new UserNotFoundException({ message: 'Benutzer nicht gefunden', $metadata: {} });
+    if (user.password !== input.AuthParameters?.PASSWORD) throw new NotAuthorizedException({ message: 'E-Mail oder Passwort ist falsch', $metadata: {} });
+    if (!user.confirmed) throw new NotAuthorizedException({ message: 'Benutzer ist nicht bestaetigt', $metadata: {} });
     // Encode sub and email in a simple base64 "token" so handlers can extract it
     const claims = { sub: user.sub, email: user.username, name: user.displayName ?? '' };
     const claimsB64 = Buffer.from(JSON.stringify(claims)).toString('base64url');
@@ -285,7 +285,7 @@ cognitoMock.on(InitiateAuthCommand).callsFake((input: any) => {
   if (input.AuthFlow === 'REFRESH_TOKEN_AUTH') {
     const sub = input.AuthParameters?.REFRESH_TOKEN?.replace('ref.', '');
     const user = [...cognitoUsers.values()].find(u => u.sub === sub);
-    if (!user) throw new NotAuthorizedException({ message: 'Invalid refresh token', $metadata: {} });
+    if (!user) throw new NotAuthorizedException({ message: 'Ungueltiger Refresh-Token', $metadata: {} });
     const claims = { sub: user.sub, email: user.username };
     const claimsB64 = Buffer.from(JSON.stringify(claims)).toString('base64url');
     return { AuthenticationResult: { IdToken: `e2e.${claimsB64}.sig`, AccessToken: `acc.${claimsB64}.sig`, ExpiresIn: 3600 } };
@@ -297,8 +297,8 @@ cognitoMock.on(GlobalSignOutCommand).resolves({});
 cognitoMock.on(ForgotPasswordCommand).resolves({});
 cognitoMock.on(ConfirmForgotPasswordCommand).callsFake((input: any) => {
   const user = cognitoUsers.get(input.Username);
-  if (!user) throw new UserNotFoundException({ message: 'User not found', $metadata: {} });
-  if (input.ConfirmationCode !== '654321') throw new CodeMismatchException({ message: 'Invalid confirmation code', $metadata: {} });
+  if (!user) throw new UserNotFoundException({ message: 'Benutzer nicht gefunden', $metadata: {} });
+  if (input.ConfirmationCode !== '654321') throw new CodeMismatchException({ message: 'Ungueltiger Bestaetigungscode', $metadata: {} });
   user.password = input.Password;
   return {};
 });
@@ -324,7 +324,7 @@ function startPlatformServer(): Promise<number> {
       const method = req.method ?? 'GET';
 
       if (auth !== platformApiKey) {
-        res.writeHead(401); res.end(JSON.stringify({ success: false, error: 'Unauthorized' })); return;
+        res.writeHead(401); res.end(JSON.stringify({ success: false, error: 'Nicht autorisiert' })); return;
       }
 
       let body = '';
@@ -359,7 +359,7 @@ function startPlatformServer(): Promise<number> {
           if (parsed.sharingCode) {
             // Connect via sharing code
             const entry = platformSharingCodes.get(parsed.sharingCode);
-            if (!entry) return json(404, { success: false, error: 'Sharing code not found or expired' });
+            if (!entry) return json(404, { success: false, error: 'Sharing-Code nicht gefunden oder abgelaufen' });
             requesterSafeWalkId = parsed.requesterSafeWalkId;
             targetSafeWalkId = entry.safeWalkId;
           } else {
@@ -392,7 +392,7 @@ function startPlatformServer(): Promise<number> {
         if (method === 'PATCH' && contactsPatchMatch) {
           const contactId = decodeURIComponent(contactsPatchMatch[1]);
           const contact = platformContacts.get(contactId);
-          if (!contact) return json(404, { success: false, error: 'Contact not found' });
+          if (!contact) return json(404, { success: false, error: 'Kontakt nicht gefunden' });
           if (parsed.locationSharing !== undefined) contact.locationSharing = parsed.locationSharing;
           if (parsed.sosSharing !== undefined) contact.sosSharing = parsed.sosSharing;
           contact.updatedAt = new Date().toISOString();
@@ -428,7 +428,7 @@ function startPlatformServer(): Promise<number> {
           return json(200, { success: true, data: { sosId: sosDeleteMatch[1], status: 'CANCELLED' } });
         }
 
-        json(404, { success: false, error: 'Not found' });
+        json(404, { success: false, error: 'Nicht gefunden' });
       });
     });
 
@@ -602,7 +602,7 @@ async function main() {
       const route = matchRoute(method, pathPart, sub);
       if (!route) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Not Found' })); return;
+        res.end(JSON.stringify({ error: 'Nicht gefunden' })); return;
       }
 
       // Parse query string params
@@ -641,7 +641,7 @@ async function main() {
         res.end(typeof result?.body === 'string' ? result.body : JSON.stringify(result?.body ?? {}));
       } catch (err: any) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'InternalError', message: err.message }));
+        res.end(JSON.stringify({ error: 'Interner Fehler', message: err.message }));
       }
     });
   });

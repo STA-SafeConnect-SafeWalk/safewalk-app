@@ -67,7 +67,6 @@ class ApiService {
     }
 
     var result = await request();
-
     if (result.statusCode == 401) {
       final refreshed = await _tryRefreshToken();
       if (refreshed) {
@@ -293,6 +292,11 @@ class ApiService {
     return _authenticatedRequest(
       () => _client.post(ApiConstants.registerPlatform),
     );
+  }
+
+  /// Fetches runtime configuration values for the app (e.g. Mapbox token).
+  Future<ApiResult> getAppConfig() async {
+    return _authenticatedRequest(() => _client.get(ApiConstants.appConfig));
   }
 
   /// Retrieves the current sharing code for the logged-in user.

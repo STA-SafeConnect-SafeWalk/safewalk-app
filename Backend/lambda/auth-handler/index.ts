@@ -59,7 +59,7 @@ const getEnv = (name: string): string | undefined => process.env[name];
 const missingEnvResponse = (name: string): APIGatewayProxyResultV2 => ({
   statusCode: 500,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: `Server configuration error: ${name} not set` }),
+  body: JSON.stringify({ error: `Serverkonfigurationsfehler: ${name} ist nicht gesetzt` }),
 });
 
 const jsonResponse = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
@@ -69,41 +69,41 @@ const jsonResponse = (statusCode: number, body: unknown): APIGatewayProxyResultV
 });
 
 function parseBody<T>(raw: string | undefined): { ok: true; body: T } | { ok: false; response: APIGatewayProxyResultV2 } {
-  if (!raw) return { ok: false, response: jsonResponse(400, { error: 'Request body is required' }) };
+  if (!raw) return { ok: false, response: jsonResponse(400, { error: 'Request-Body ist erforderlich' }) };
   try {
     return { ok: true, body: JSON.parse(raw) as T };
   } catch {
-    return { ok: false, response: jsonResponse(400, { error: 'Invalid JSON in request body' }) };
+    return { ok: false, response: jsonResponse(400, { error: 'Ungueltiges JSON im Request-Body' }) };
   }
 }
 
 /** Maps known Cognito errors to appropriate HTTP status codes. */
 function cognitoErrorResponse(error: unknown): APIGatewayProxyResultV2 {
   if (error instanceof NotAuthorizedException) {
-    return jsonResponse(401, { error: 'Incorrect email or password' });
+    return jsonResponse(401, { error: 'E-Mail oder Passwort ist falsch' });
   }
   if (error instanceof UserNotFoundException) {
-    return jsonResponse(404, { error: 'User not found' });
+    return jsonResponse(404, { error: 'Benutzer nicht gefunden' });
   }
   if (error instanceof UsernameExistsException) {
-    return jsonResponse(409, { error: 'An account with this email already exists' });
+    return jsonResponse(409, { error: 'Ein Konto mit dieser E-Mail existiert bereits' });
   }
   if (error instanceof CodeMismatchException) {
-    return jsonResponse(400, { error: 'Invalid confirmation code' });
+    return jsonResponse(400, { error: 'Ungueltiger Bestaetigungscode' });
   }
   if (error instanceof ExpiredCodeException) {
-    return jsonResponse(400, { error: 'Confirmation code has expired' });
+    return jsonResponse(400, { error: 'Bestaetigungscode ist abgelaufen' });
   }
   if (error instanceof InvalidPasswordException) {
-    return jsonResponse(400, { error: 'Password does not meet requirements' });
+    return jsonResponse(400, { error: 'Passwort erfuellt die Anforderungen nicht' });
   }
   if (error instanceof LimitExceededException || error instanceof TooManyRequestsException) {
-    return jsonResponse(429, { error: 'Too many requests, please try again later' });
+    return jsonResponse(429, { error: 'Zu viele Anfragen, bitte spaeter erneut versuchen' });
   }
   console.error('Unhandled Cognito error:', error);
   return jsonResponse(500, {
-    error: 'Authentication service error',
-    details: error instanceof Error ? error.message : 'Unknown error',
+    error: 'Fehler beim Authentifizierungsdienst',
+    details: error instanceof Error ? error.message : 'Unbekannter Fehler',
   });
 }
 
@@ -136,7 +136,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return handleConfirmForgotPassword(event, appClientId);
 
     default:
-      return jsonResponse(404, { error: 'Route not found' });
+      return jsonResponse(404, { error: 'Route nicht gefunden' });
   }
 };
 
@@ -149,10 +149,10 @@ async function handleSignUp(
   const { email, password, displayName } = parsed.body;
 
   if (!email || typeof email !== 'string') {
-    return jsonResponse(400, { error: 'email is required and must be a string' });
+    return jsonResponse(400, { error: 'email ist erforderlich und muss eine Zeichenkette sein' });
   }
   if (!password || typeof password !== 'string') {
-    return jsonResponse(400, { error: 'password is required and must be a string' });
+    return jsonResponse(400, { error: 'password ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   try {
@@ -188,10 +188,10 @@ async function handleConfirm(
   const { email, confirmationCode } = parsed.body;
 
   if (!email || typeof email !== 'string') {
-    return jsonResponse(400, { error: 'email is required and must be a string' });
+    return jsonResponse(400, { error: 'email ist erforderlich und muss eine Zeichenkette sein' });
   }
   if (!confirmationCode || typeof confirmationCode !== 'string') {
-    return jsonResponse(400, { error: 'confirmationCode is required and must be a string' });
+    return jsonResponse(400, { error: 'confirmationCode ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   try {
@@ -219,10 +219,10 @@ async function handleSignIn(
   const { email, password } = parsed.body;
 
   if (!email || typeof email !== 'string') {
-    return jsonResponse(400, { error: 'email is required and must be a string' });
+    return jsonResponse(400, { error: 'email ist erforderlich und muss eine Zeichenkette sein' });
   }
   if (!password || typeof password !== 'string') {
-    return jsonResponse(400, { error: 'password is required and must be a string' });
+    return jsonResponse(400, { error: 'password ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   try {
@@ -238,7 +238,7 @@ async function handleSignIn(
     );
 
     if (!result.AuthenticationResult) {
-      return jsonResponse(401, { error: 'Authentication failed' });
+      return jsonResponse(401, { error: 'Authentifizierung fehlgeschlagen' });
     }
 
     console.log('User signed in:', email);
@@ -262,7 +262,7 @@ async function handleRefresh(
   const { refreshToken } = parsed.body;
 
   if (!refreshToken || typeof refreshToken !== 'string') {
-    return jsonResponse(400, { error: 'refreshToken is required and must be a string' });
+    return jsonResponse(400, { error: 'refreshToken ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   try {
@@ -277,7 +277,7 @@ async function handleRefresh(
     );
 
     if (!result.AuthenticationResult) {
-      return jsonResponse(401, { error: 'Token refresh failed' });
+      return jsonResponse(401, { error: 'Token-Aktualisierung fehlgeschlagen' });
     }
 
     return jsonResponse(200, {
@@ -296,7 +296,7 @@ async function handleSignOut(event: APIGatewayProxyEventV2): Promise<APIGatewayP
   const { accessToken } = parsed.body;
 
   if (!accessToken || typeof accessToken !== 'string') {
-    return jsonResponse(400, { error: 'accessToken is required and must be a string' });
+    return jsonResponse(400, { error: 'accessToken ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   try {
@@ -317,7 +317,7 @@ async function handleForgotPassword(
   const { email } = parsed.body;
 
   if (!email || typeof email !== 'string') {
-    return jsonResponse(400, { error: 'email is required and must be a string' });
+    return jsonResponse(400, { error: 'email ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   try {
@@ -352,13 +352,13 @@ async function handleConfirmForgotPassword(
   const { email, confirmationCode, newPassword } = parsed.body;
 
   if (!email || typeof email !== 'string') {
-    return jsonResponse(400, { error: 'email is required and must be a string' });
+    return jsonResponse(400, { error: 'email ist erforderlich und muss eine Zeichenkette sein' });
   }
   if (!confirmationCode || typeof confirmationCode !== 'string') {
-    return jsonResponse(400, { error: 'confirmationCode is required and must be a string' });
+    return jsonResponse(400, { error: 'confirmationCode ist erforderlich und muss eine Zeichenkette sein' });
   }
   if (!newPassword || typeof newPassword !== 'string') {
-    return jsonResponse(400, { error: 'newPassword is required and must be a string' });
+    return jsonResponse(400, { error: 'newPassword ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   try {

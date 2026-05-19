@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:safewalk/models/map_models.dart';
+import 'package:safewalk/services/app_config_service.dart';
 import 'package:safewalk/services/api_service.dart';
 import 'package:safewalk/services/mapbox_places_service.dart';
 
@@ -38,11 +39,14 @@ class MapViewModel extends ChangeNotifier {
   MapViewModel({
     ApiService? apiService,
     MapboxPlacesService? mapboxPlacesService,
+    AppConfigService? appConfigService,
   }) : _apiService = apiService ?? ApiService(),
-       _mapboxPlacesService = mapboxPlacesService ?? MapboxPlacesService();
+       _mapboxPlacesService = mapboxPlacesService ?? MapboxPlacesService(),
+       _appConfigService = appConfigService ?? AppConfigService();
 
   final ApiService _apiService;
   final MapboxPlacesService _mapboxPlacesService;
+  final AppConfigService _appConfigService;
 
   static const _defaultCenter = LatLng(48.137154, 11.576124);
   static const _defaultZoom = 13.0;
@@ -208,7 +212,7 @@ class MapViewModel extends ChangeNotifier {
   int get renderGeneration => _renderGeneration;
 
   bool get isMapboxConfigured => _mapboxPlacesService.isConfigured;
-  String get mapboxAccessToken => MapboxPlacesService.accessToken;
+  String get mapboxAccessToken => _mapboxPlacesService.accessToken;
   String get mapboxStyleUri => MapboxPlacesService.styleUri;
 
   List<MapLayerMetadata> get selectedLayers => _publicDataLayers
@@ -294,6 +298,7 @@ class MapViewModel extends ChangeNotifier {
 
     notifyListeners();
 
+    await _loadAppConfig();
     await _loadCurrentLocation();
 
     _isInitializing = false;
@@ -677,6 +682,37 @@ class MapViewModel extends ChangeNotifier {
       }
     } finally {
       _isFetchingLocation = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadAppConfig() async {
+    final cachedToken = await _appConfigService.mapboxAccessToken;
+    if (cachedToken != null && cachedToken.trim().isNotEmpty) {
+      _mapboxPlacesService.updateAccessToken(cachedToken.trim());
+      notifyListeners();
+    }
+
+    final result = await _apiService.getAppConfig();
+    if (!result.isSuccess) return;
+
+    final payload = result.data;
+    Map<String, dynamic>? config;
+    if (payload is Map<String, dynamic>) {
+      final data = payload['data'];
+      if (data is Map<String, dynamic>) {
+        config = data;
+      } else {
+        config = payload;
+      }
+    }
+    if (config == null) return;
+
+    final token = config['mapboxAccessToken'];
+    if (token is String && token.trim().isNotEmpty) {
+      final trimmed = token.trim();
+      await _appConfigService.saveMapboxAccessToken(trimmed);
+      _mapboxPlacesService.updateAccessToken(trimmed);
       notifyListeners();
     }
   }

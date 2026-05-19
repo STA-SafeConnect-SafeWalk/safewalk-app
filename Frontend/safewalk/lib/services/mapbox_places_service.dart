@@ -4,21 +4,38 @@ import 'package:http/http.dart' as http;
 import 'package:safewalk/models/map_models.dart';
 
 class MapboxPlacesService {
-  MapboxPlacesService({http.Client? client, String? geocodingBaseUrl})
-    : _client = client ?? http.Client(),
-      _geocodingBaseUrl =
-          geocodingBaseUrl ??
-          'https://api.mapbox.com/geocoding/v5/mapbox.places';
+  MapboxPlacesService({
+    http.Client? client,
+    String? geocodingBaseUrl,
+    String? accessTokenOverride,
+  }) : _client = client ?? http.Client(),
+       _geocodingBaseUrl =
+           geocodingBaseUrl ??
+           'https://api.mapbox.com/geocoding/v5/mapbox.places',
+       _accessTokenOverride = accessTokenOverride;
 
-  static const accessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+  static const accessTokenFallback =
+      String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
 
   static const styleUri =
       'mapbox://styles/safewalkteam/cmobay96u00a801s805jsegqr';
 
   final http.Client _client;
   final String _geocodingBaseUrl;
+  String? _accessTokenOverride;
 
-  bool get isConfigured => accessToken.isNotEmpty;
+  String get _effectiveAccessToken =>
+      (_accessTokenOverride ?? '').isNotEmpty
+          ? _accessTokenOverride!
+          : accessTokenFallback;
+
+  bool get isConfigured => _effectiveAccessToken.isNotEmpty;
+
+  String get accessToken => _effectiveAccessToken;
+
+  void updateAccessToken(String? accessToken) {
+    _accessTokenOverride = accessToken;
+  }
 
   Future<List<MapPlaceSuggestion>> searchPlaces(
     String query, {
@@ -34,7 +51,7 @@ class MapboxPlacesService {
     final encodedQuery = Uri.encodeComponent(trimmedQuery);
     final uri = Uri.parse('$_geocodingBaseUrl/$encodedQuery.json').replace(
       queryParameters: {
-        'access_token': accessToken,
+        'access_token': _effectiveAccessToken,
         'autocomplete': 'true',
         'limit': '$limit',
         'language': 'de',

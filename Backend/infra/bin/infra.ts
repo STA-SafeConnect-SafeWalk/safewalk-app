@@ -8,6 +8,7 @@ import { TipsStack } from '../lib/tips-stack';
 import { LiveLocationStack } from '../lib/live-location-stack';
 import { MapDataStack } from '../lib/map-data-stack';
 import { ApiStack } from '../lib/api-stack';
+import { AppConfigStack } from '../lib/app-config-stack';
 
 const app = new cdk.App();
 
@@ -16,7 +17,13 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-const required = ['PLATFORM_DOMAIN', 'VENDOR_ID', 'API_KEY', 'WEBHOOK_SECRET'];
+const required = [
+  'PLATFORM_DOMAIN',
+  'VENDOR_ID',
+  'API_KEY',
+  'WEBHOOK_SECRET',
+  'MAPBOX_ACCESS_TOKEN',
+];
 for (const name of required) {
   if (!process.env[name]) {
     throw new Error(`Missing required env var: ${name}`);
@@ -42,11 +49,16 @@ const liveLocationStack = new LiveLocationStack(app, 'safewalk-app-live-location
 });
 const tipsStack = new TipsStack(app, 'safewalk-app-tips-stack', { env });
 const mapDataStack = new MapDataStack(app, 'safewalk-app-map-data-stack', { env });
+const appConfigStack = new AppConfigStack(app, 'safewalk-app-config-stack', {
+  env,
+  mapboxAccessToken: process.env.MAPBOX_ACCESS_TOKEN!,
+});
 new ApiStack(app, 'safewalk-app-api-stack', {
   env,
   userPool: authStack.userPool,
   userPoolClient: authStack.userPoolClient,
   authHandler: authStack.authHandler,
+  appConfigHandler: appConfigStack.appConfigHandler,
   userProfileHandler: userStack.userProfileHandler,
   platformRegistrationHandler: userStack.platformRegistrationHandler,
   notificationHandler: notificationStack.notificationHandler,

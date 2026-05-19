@@ -89,7 +89,7 @@ class _MainShellState extends State<MainShell> {
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() => _currentIndex = index);
-          // Refresh contacts data when switching to the Kontakte tab.
+          // Refresh contacts data when switching to the Kontakt tab.
           if (index == 2) {
             context.read<ContactsViewModel>().fetchContacts();
           }

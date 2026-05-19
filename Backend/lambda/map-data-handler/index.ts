@@ -402,19 +402,19 @@ const handleGetMapData = async (
   if (lat === null || lng === null || radius === null) {
     return jsonResponse(400, {
       success: false,
-      message: 'lat, lng and radius query parameters are required',
+      message: 'Die Query-Parameter lat, lng und radius sind erforderlich',
     });
   }
   if (!isValidLat(lat) || !isValidLng(lng)) {
     return jsonResponse(400, {
       success: false,
-      message: 'lat/lng out of range',
+      message: 'lat/lng ausserhalb des gueltigen Bereichs',
     });
   }
   if (radius < MIN_RADIUS_METERS || radius > MAX_RADIUS_METERS) {
     return jsonResponse(400, {
       success: false,
-      message: `radius must be between ${MIN_RADIUS_METERS} and ${MAX_RADIUS_METERS} meters`,
+      message: `radius muss zwischen ${MIN_RADIUS_METERS} und ${MAX_RADIUS_METERS} Metern liegen`,
     });
   }
 
@@ -474,13 +474,13 @@ const handleCreateReport = async (
   reportsTable: string,
 ): Promise<APIGatewayProxyResultV2> => {
   if (!event.body) {
-    return jsonResponse(400, { success: false, message: 'Request body required' });
+    return jsonResponse(400, { success: false, message: 'Request-Body ist erforderlich' });
   }
   let parsed: Partial<MapReport> & { type?: string };
   try {
     parsed = JSON.parse(event.body);
   } catch {
-    return jsonResponse(400, { success: false, message: 'Invalid JSON body' });
+    return jsonResponse(400, { success: false, message: 'Ungueltiger JSON-Body' });
   }
 
   const lat = typeof parsed.lat === 'number' ? parsed.lat : null;
@@ -492,12 +492,12 @@ const handleCreateReport = async (
       : undefined;
 
   if (lat === null || lng === null || !isValidLat(lat) || !isValidLng(lng)) {
-    return jsonResponse(400, { success: false, message: 'Valid lat/lng required' });
+    return jsonResponse(400, { success: false, message: 'Gueltige lat/lng sind erforderlich' });
   }
   if (!REPORT_TYPES.has(type as ReportType)) {
     return jsonResponse(400, {
       success: false,
-      message: `type must be one of: ${[...REPORT_TYPES].join(', ')}`,
+      message: `type muss einer der folgenden Werte sein: ${[...REPORT_TYPES].join(', ')}`,
     });
   }
 
@@ -548,12 +548,12 @@ const handleDeleteReport = async (
   const lat = parseFloatOrNull(event.queryStringParameters?.lat);
   const lng = parseFloatOrNull(event.queryStringParameters?.lng);
   if (!reportId) {
-    return jsonResponse(400, { success: false, message: 'reportId is required' });
+    return jsonResponse(400, { success: false, message: 'reportId ist erforderlich' });
   }
   if (lat === null || lng === null) {
     return jsonResponse(400, {
       success: false,
-      message: 'lat and lng query parameters required to locate the report',
+      message: 'lat- und lng-Query-Parameter sind erforderlich, um den Report zu finden',
     });
   }
   const bucket = bucketKey(lat, lng);
@@ -565,10 +565,10 @@ const handleDeleteReport = async (
     }),
   );
   if (!existing.Item) {
-    return jsonResponse(404, { success: false, message: 'Report not found' });
+    return jsonResponse(404, { success: false, message: 'Report nicht gefunden' });
   }
   if ((existing.Item as MapReport).userId !== userId) {
-    return jsonResponse(403, { success: false, message: 'Forbidden' });
+    return jsonResponse(403, { success: false, message: 'Zugriff verboten' });
   }
 
   await docClient.send(
@@ -591,7 +591,7 @@ export const handler = async (
     return jsonResponse(500, {
       success: false,
       message:
-        'Server configuration error: MAP_REPORTS_TABLE_NAME / MAP_CACHE_TABLE_NAME not set',
+        'Serverkonfigurationsfehler: MAP_REPORTS_TABLE_NAME / MAP_CACHE_TABLE_NAME ist nicht gesetzt',
     });
   }
 
@@ -600,7 +600,7 @@ export const handler = async (
   if (route === 'GET /map-data') {
     const userId = getAuthenticatedUserId(event);
     if (!userId) {
-      return jsonResponse(401, { success: false, message: 'Unauthorized' });
+      return jsonResponse(401, { success: false, message: 'Nicht autorisiert' });
     }
     return handleGetMapData(event, reportsTable, cacheTable);
   }
@@ -608,7 +608,7 @@ export const handler = async (
   if (route === 'POST /map-data/reports') {
     const userId = getAuthenticatedUserId(event);
     if (!userId) {
-      return jsonResponse(401, { success: false, message: 'Unauthorized' });
+      return jsonResponse(401, { success: false, message: 'Nicht autorisiert' });
     }
     return handleCreateReport(event, userId, reportsTable);
   }
@@ -616,10 +616,10 @@ export const handler = async (
   if (route === 'DELETE /map-data/reports/{reportId}') {
     const userId = getAuthenticatedUserId(event);
     if (!userId) {
-      return jsonResponse(401, { success: false, message: 'Unauthorized' });
+      return jsonResponse(401, { success: false, message: 'Nicht autorisiert' });
     }
     return handleDeleteReport(event, userId, reportsTable);
   }
 
-  return jsonResponse(404, { success: false, message: 'Route not found' });
+  return jsonResponse(404, { success: false, message: 'Route nicht gefunden' });
 };

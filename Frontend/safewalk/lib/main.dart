@@ -27,8 +27,8 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Set the Mapbox access token before any MapView is created.
-  if (MapboxPlacesService.accessToken.isNotEmpty) {
-    MapboxOptions.setAccessToken(MapboxPlacesService.accessToken);
+  if (MapboxPlacesService.accessTokenFallback.isNotEmpty) {
+    MapboxOptions.setAccessToken(MapboxPlacesService.accessTokenFallback);
   }
 
   // Shared services so all ViewModels use the same instances.

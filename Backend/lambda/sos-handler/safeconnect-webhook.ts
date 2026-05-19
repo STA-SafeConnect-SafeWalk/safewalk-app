@@ -72,30 +72,30 @@ export function verifySafeConnectWebhook(
   const eventType = header('x-safewalk-event');
 
   if (!signature || !timestamp || !eventType) {
-    return { valid: false, error: 'Missing required webhook headers' };
+    return { valid: false, error: 'Erforderliche Webhook-Header fehlen' };
   }
 
   if (!verifyTimestamp(timestamp)) {
-    return { valid: false, error: 'Webhook timestamp outside acceptable window' };
+    return { valid: false, error: 'Webhook-Zeitstempel ausserhalb des zulaessigen Fensters' };
   }
 
   if (!verifySignature(rawBody, signature, timestamp, webhookSecret)) {
-    return { valid: false, error: 'Invalid webhook signature' };
+    return { valid: false, error: 'Ungueltige Webhook-Signatur' };
   }
 
   let payload: SafeWalkWebhookPayload;
   try {
     payload = JSON.parse(rawBody) as SafeWalkWebhookPayload;
   } catch {
-    return { valid: false, error: 'Invalid JSON payload' };
+    return { valid: false, error: 'Ungueltiges JSON-Payload' };
   }
 
   if (!payload.type || !payload.sosId || !payload.timestamp || !payload.victim) {
-    return { valid: false, error: 'Malformed webhook payload: missing required fields' };
+    return { valid: false, error: 'Ungueltiges Webhook-Payload: Pflichtfelder fehlen' };
   }
 
   if (payload.type !== eventType) {
-    return { valid: false, error: 'Webhook event type header does not match payload' };
+    return { valid: false, error: 'Webhook-Eventtyp-Header passt nicht zum Payload' };
   }
 
   return { valid: true, payload };

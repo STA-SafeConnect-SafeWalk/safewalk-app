@@ -10,6 +10,7 @@ export interface ApiStackProps extends cdk.StackProps {
   userPool: cognito.UserPool;
   userPoolClient: cognito.UserPoolClient;
   authHandler: lambda.IFunction;
+  appConfigHandler?: lambda.IFunction;
   userProfileHandler?: lambda.IFunction;
   platformRegistrationHandler?: lambda.IFunction;
   notificationHandler?: lambda.IFunction;
@@ -28,6 +29,7 @@ export class ApiStack extends cdk.Stack {
       userPool,
       userPoolClient,
       authHandler,
+      appConfigHandler,
       userProfileHandler,
       platformRegistrationHandler,
       notificationHandler,
@@ -114,6 +116,20 @@ export class ApiStack extends cdk.Stack {
       methods: [apigateway.HttpMethod.POST],
       integration: authLambdaIntegration,
     });
+
+    if (appConfigHandler) {
+      const appConfigIntegration = new apigatewayIntegrations.HttpLambdaIntegration(
+        'app-config-integration',
+        appConfigHandler,
+      );
+
+      httpApi.addRoutes({
+        path: '/app-config',
+        methods: [apigateway.HttpMethod.GET],
+        integration: appConfigIntegration,
+        authorizer: jwtAuthorizer,
+      });
+    }
 
     /* User profile routes */
 

@@ -65,7 +65,7 @@ const getEnv = (name: string): string | undefined => process.env[name];
 const missingEnvResponse = (name: string): APIGatewayProxyResultV2 => ({
   statusCode: 500,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: `Server configuration error: ${name} not set` }),
+  body: JSON.stringify({ error: `Serverkonfigurationsfehler: ${name} ist nicht gesetzt` }),
 });
 
 const jsonResponse = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
@@ -82,7 +82,7 @@ const getAuthenticatedUserId = (event: APIGatewayProxyEventV2): string | undefin
 const UNAUTHORIZED_RESPONSE: APIGatewayProxyResultV2 = {
   statusCode: 401,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: 'Unauthorized' }),
+  body: JSON.stringify({ error: 'Nicht autorisiert' }),
 };
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<any> => {
@@ -106,7 +106,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<any> => {
       return handleGetSingleContactLocation(event, locationsTable, usersTable);
 
     default:
-      return jsonResponse(404, { error: 'Route not found' });
+      return jsonResponse(404, { error: 'Route nicht gefunden' });
   }
 };
 
@@ -173,33 +173,33 @@ async function handleUpdateLocation(
   try {
     body = JSON.parse(event.body ?? '');
   } catch {
-    return jsonResponse(400, { error: 'Invalid JSON body' });
+    return jsonResponse(400, { error: 'Ungueltiger JSON-Body' });
   }
 
   if (typeof body.lat !== 'number' || typeof body.lng !== 'number' || typeof body.accuracy !== 'number') {
-    return jsonResponse(400, { error: 'lat, lng, and accuracy are required and must be numbers' });
+    return jsonResponse(400, { error: 'lat, lng und accuracy sind erforderlich und muessen Zahlen sein' });
   }
 
   if (body.lat < -90 || body.lat > 90) {
-    return jsonResponse(400, { error: 'lat must be between -90 and 90' });
+    return jsonResponse(400, { error: 'lat muss zwischen -90 und 90 liegen' });
   }
   if (body.lng < -180 || body.lng > 180) {
-    return jsonResponse(400, { error: 'lng must be between -180 and 180' });
+    return jsonResponse(400, { error: 'lng muss zwischen -180 und 180 liegen' });
   }
   if (body.accuracy < 0) {
-    return jsonResponse(400, { error: 'accuracy must be non-negative' });
+    return jsonResponse(400, { error: 'accuracy muss nicht negativ sein' });
   }
 
   let safeWalkId: string;
   try {
     const resolved = await resolveUserSafeWalkId(userId, usersTable);
     if (!resolved) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = resolved;
   } catch (error) {
     console.error('Error resolving safeWalkId:', error);
-    return jsonResponse(500, { error: 'Failed to resolve user identity' });
+    return jsonResponse(500, { error: 'Benutzeridentitaet konnte nicht aufgeloest werden' });
   }
 
   const ttlSeconds = parseInt(getEnv('LOCATION_TTL_SECONDS') ?? '120', 10);
@@ -221,7 +221,7 @@ async function handleUpdateLocation(
     );
   } catch (error) {
     console.error('Error storing location:', error);
-    return jsonResponse(500, { error: 'Failed to store location' });
+    return jsonResponse(500, { error: 'Standort konnte nicht gespeichert werden' });
   }
 
   return jsonResponse(200, record);
@@ -240,12 +240,12 @@ async function handleDeleteLocation(
   try {
     const resolved = await resolveUserSafeWalkId(userId, usersTable);
     if (!resolved) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = resolved;
   } catch (error) {
     console.error('Error resolving safeWalkId:', error);
-    return jsonResponse(500, { error: 'Failed to resolve user identity' });
+    return jsonResponse(500, { error: 'Benutzeridentitaet konnte nicht aufgeloest werden' });
   }
 
   try {
@@ -254,7 +254,7 @@ async function handleDeleteLocation(
     );
   } catch (error) {
     console.error('Error deleting location:', error);
-    return jsonResponse(500, { error: 'Failed to delete location' });
+    return jsonResponse(500, { error: 'Standort konnte nicht geloescht werden' });
   }
 
   return { statusCode: 204, body: '' };
@@ -278,12 +278,12 @@ async function handleGetContactLocations(
   try {
     const resolved = await resolveUserSafeWalkId(userId, usersTable);
     if (!resolved) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = resolved;
   } catch (error) {
     console.error('Error resolving safeWalkId:', error);
-    return jsonResponse(500, { error: 'Failed to resolve user identity' });
+    return jsonResponse(500, { error: 'Benutzeridentitaet konnte nicht aufgeloest werden' });
   }
 
   let sharingContacts: Map<string, string>;
@@ -291,7 +291,7 @@ async function handleGetContactLocations(
     sharingContacts = await resolveContactsWhoShareLocation(safeWalkId);
   } catch (error) {
     console.error('Error resolving contacts:', error);
-    return jsonResponse(502, { error: 'Failed to fetch trusted contacts' });
+    return jsonResponse(502, { error: 'Vertrauenspersonen konnten nicht abgerufen werden' });
   }
 
   if (sharingContacts.size === 0) {
@@ -335,7 +335,7 @@ async function handleGetContactLocations(
     return jsonResponse(200, { locations });
   } catch (error) {
     console.error('Error fetching locations:', error);
-    return jsonResponse(500, { error: 'Failed to fetch contact locations' });
+    return jsonResponse(500, { error: 'Kontaktstandorte konnten nicht abgerufen werden' });
   }
 }
 
@@ -354,19 +354,19 @@ async function handleGetSingleContactLocation(
 
   const targetSafeWalkId = event.pathParameters?.safeWalkId;
   if (!targetSafeWalkId) {
-    return jsonResponse(400, { error: 'Missing safeWalkId path parameter' });
+    return jsonResponse(400, { error: 'Pfadparameter safeWalkId fehlt' });
   }
 
   let safeWalkId: string;
   try {
     const resolved = await resolveUserSafeWalkId(userId, usersTable);
     if (!resolved) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = resolved;
   } catch (error) {
     console.error('Error resolving safeWalkId:', error);
-    return jsonResponse(500, { error: 'Failed to resolve user identity' });
+    return jsonResponse(500, { error: 'Benutzeridentitaet konnte nicht aufgeloest werden' });
   }
 
   let sharingContacts: Map<string, string>;
@@ -374,11 +374,11 @@ async function handleGetSingleContactLocation(
     sharingContacts = await resolveContactsWhoShareLocation(safeWalkId);
   } catch (error) {
     console.error('Error resolving contacts:', error);
-    return jsonResponse(502, { error: 'Failed to fetch trusted contacts' });
+    return jsonResponse(502, { error: 'Vertrauenspersonen konnten nicht abgerufen werden' });
   }
 
   if (!sharingContacts.has(targetSafeWalkId)) {
-    return jsonResponse(404, { error: 'Contact not found or not sharing location' });
+    return jsonResponse(404, { error: 'Kontakt nicht gefunden oder teilt keinen Standort' });
   }
 
   try {
@@ -387,12 +387,12 @@ async function handleGetSingleContactLocation(
     );
 
     if (!result.Item) {
-      return jsonResponse(404, { error: 'Contact is not currently sharing their location' });
+      return jsonResponse(404, { error: 'Kontakt teilt seinen Standort derzeit nicht' });
     }
 
     const nowEpoch = Math.floor(Date.now() / 1000);
     if ((result.Item.expiresAt as number) <= nowEpoch) {
-      return jsonResponse(404, { error: 'Contact location has expired' });
+      return jsonResponse(404, { error: 'Kontaktstandort ist abgelaufen' });
     }
 
     const location: ContactLocationResponse = {
@@ -407,7 +407,7 @@ async function handleGetSingleContactLocation(
     return jsonResponse(200, location);
   } catch (error) {
     console.error('Error fetching location:', error);
-    return jsonResponse(500, { error: 'Failed to fetch contact location' });
+    return jsonResponse(500, { error: 'Kontaktstandort konnte nicht abgerufen werden' });
   }
 }
 
@@ -446,10 +446,10 @@ async function sendRequest<T>(url: string, method: HttpMethod, apiKey: string, p
           try {
             resolve(JSON.parse(responseData) as T);
           } catch {
-            reject(new Error(`Failed to parse platform response: ${responseData}`));
+            reject(new Error(`Plattformantwort konnte nicht geparst werden: ${responseData}`));
           }
         } else {
-          reject(new Error(`Platform returned status ${res.statusCode}: ${responseData}`));
+          reject(new Error(`Plattform lieferte Status ${res.statusCode}: ${responseData}`));
         }
       });
     });

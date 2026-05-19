@@ -78,4 +78,5 @@ runs:
         WEBHOOK_SECRET: ${{ inputs.webhook-secret }}
         PLATFORM_DOMAIN: ${{ inputs.platform-domain }}
         VENDOR_ID: ${{ inputs.vendor-id }}
+        MAPBOX_ACCESS_TOKEN: ${{ inputs.mapbox-access-token }}
       run: npx cdk deploy --all --require-approval never

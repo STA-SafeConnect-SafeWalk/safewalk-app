@@ -39,8 +39,12 @@ class AuthService {
     if (_useSecureStorage) {
       await _secure.write(key: key, value: value);
     } else {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(key, value);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(key, value);
+      } catch (_) {
+        // Ignore storage errors in unsupported test environments.
+      }
     }
   }
 
@@ -48,8 +52,12 @@ class AuthService {
     if (_useSecureStorage) {
       return _secure.read(key: key);
     } else {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(key);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        return prefs.getString(key);
+      } catch (_) {
+        return null;
+      }
     }
   }
 
@@ -57,8 +65,12 @@ class AuthService {
     if (_useSecureStorage) {
       await _secure.delete(key: key);
     } else {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(key);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(key);
+      } catch (_) {
+        // Ignore storage errors in unsupported test environments.
+      }
     }
   }
 

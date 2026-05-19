@@ -107,19 +107,19 @@ export const handler = async (
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> => {
   if (event.routeKey !== 'GET /tips') {
-    return jsonResponse(404, { success: false, message: 'Route not found' });
+    return jsonResponse(404, { success: false, message: 'Route nicht gefunden' });
   }
 
   const userId = getAuthenticatedUserId(event);
   if (!userId) {
-    return jsonResponse(401, { success: false, message: 'Unauthorized' });
+    return jsonResponse(401, { success: false, message: 'Nicht autorisiert' });
   }
 
   const tableName = process.env.TIPS_TABLE_NAME;
   if (!tableName) {
     return jsonResponse(500, {
       success: false,
-      message: 'Server configuration error: TIPS_TABLE_NAME not set',
+      message: 'Serverkonfigurationsfehler: TIPS_TABLE_NAME ist nicht gesetzt',
     });
   }
 
@@ -169,7 +169,7 @@ export const handler = async (
     console.error('Failed to load tips', error);
     return jsonResponse(500, {
       success: false,
-      message: 'Failed to load tips',
+      message: 'Tipps konnten nicht geladen werden',
     });
   }
 };

@@ -127,6 +127,9 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onViewModelChanged() {
     final vm = context.read<MapViewModel>();
+    if (vm.isMapboxConfigured) {
+      MapboxOptions.setAccessToken(vm.mapboxAccessToken);
+    }
     unawaited(_ensureInitialCameraSync(vm));
 
     final generationChanged = vm.renderGeneration != _lastRenderGeneration;
@@ -283,7 +286,7 @@ class _MapScreenState extends State<MapScreen> {
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 32),
             child: Text(
-              'Mapbox ist noch nicht konfiguriert. Bitte MAPBOX_ACCESS_TOKEN als Dart-Define setzen.',
+                  'Mapbox ist noch nicht konfiguriert. Bitte melde dich an oder pruefe die App-Konfiguration.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF3A4B4D), fontSize: 15),
             ),

@@ -131,3 +131,13 @@ flutter run -d <your-device-id> --dart-define-from-file=firebase.env.json
 with your device id.
 
 For hot-reload press `r` in the terminal.
+
+---
+
+## Runtime configuration (Mapbox)
+
+The Mapbox access token is fetched at runtime from the backend `GET /app-config`
+endpoint after the user is authenticated. This keeps the token out of release
+APKs. Local development can still use a `MAPBOX_ACCESS_TOKEN` dart-define as a
+fallback, but the checked-in `firebase.env.json` leaves it blank.
+

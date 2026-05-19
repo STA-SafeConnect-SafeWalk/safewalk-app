@@ -52,7 +52,6 @@ class TipsViewModel extends ChangeNotifier {
   Tip? get tipOfTheDay => _tipOfTheDay;
 
   List<Tip> _tips = const [];
-
   String _searchQuery = '';
   String get searchQuery => _searchQuery;
 

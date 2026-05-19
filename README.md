@@ -1,6 +1,9 @@
 # SafeWalk
 SafeWalk's repository for the 1st-party app's Backend and Frontend. 
 
+## Build Status
+[![SafeWalk App](https://github.com/STA-SafeConnect-SafeWalk/safewalk-app/actions/workflows/main.yml/badge.svg)](https://github.com/STA-SafeConnect-SafeWalk/safewalk-app/actions/workflows/main.yml)
+
 ## Ways of Working
 
 In order to maintain the repository's order and to be able to maintain the history of the commits, please use the rules defined in the following section.

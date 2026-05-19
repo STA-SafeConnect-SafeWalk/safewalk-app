@@ -95,7 +95,7 @@ const jsonResponse = (statusCode: number, body: unknown): APIGatewayProxyResultV
 const missingEnvResponse = (name: string): APIGatewayProxyResultV2 => ({
   statusCode: 500,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: `Server configuration error: ${name} not set` }),
+  body: JSON.stringify({ error: `Serverkonfigurationsfehler: ${name} ist nicht gesetzt` }),
 });
 
 const getAuthenticatedUserId = (event: APIGatewayProxyEventV2): string | undefined => {
@@ -107,7 +107,7 @@ const getAuthenticatedUserId = (event: APIGatewayProxyEventV2): string | undefin
 const UNAUTHORIZED_RESPONSE: APIGatewayProxyResultV2 = {
   statusCode: 401,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: 'Unauthorized' }),
+  body: JSON.stringify({ error: 'Nicht autorisiert' }),
 };
 
 function isValidGeoLocation(geo: unknown): geo is GeoLocation {
@@ -154,7 +154,7 @@ async function handleAPIGatewayEvent(
     case 'POST /webhook/sos':
       return handleWebhookSOS(event);
     default:
-      return jsonResponse(404, { error: 'Route not found' });
+      return jsonResponse(404, { error: 'Route nicht gefunden' });
   }
 }
 
@@ -171,15 +171,15 @@ async function handleTriggerSOS(
 
   let requestBody: TriggerSOSRequest;
   try {
-    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    if (!event.body) return jsonResponse(400, { error: 'Request-Body ist erforderlich' });
     requestBody = JSON.parse(event.body) as TriggerSOSRequest;
   } catch {
-    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+    return jsonResponse(400, { error: 'Ungueltiges JSON im Request-Body' });
   }
 
   if (requestBody.geoLocation !== undefined && !isValidGeoLocation(requestBody.geoLocation)) {
     return jsonResponse(400, {
-      error: 'Valid geoLocation with lat (-90..90) and lng (-180..180) is required',
+      error: 'Gueltige geoLocation mit lat (-90..90) und lng (-180..180) ist erforderlich',
     });
   }
 
@@ -190,12 +190,12 @@ async function handleTriggerSOS(
       new GetCommand({ TableName: appUsersTableName, Key: { safeWalkAppId: userId } }),
     );
     if (!result.Item?.safeWalkId) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
     console.error('Error retrieving user:', error);
-    return jsonResponse(500, { error: 'Failed to retrieve user data' });
+    return jsonResponse(500, { error: 'Benutzerdaten konnten nicht abgerufen werden' });
   }
 
   // Supersede any existing PENDING or ACTIVE SOS for this user
@@ -257,7 +257,7 @@ async function handleTriggerSOS(
     );
   } catch (error) {
     console.error('Error creating SOS record:', error);
-    return jsonResponse(500, { error: 'Failed to create SOS event' });
+    return jsonResponse(500, { error: 'SOS-Ereignis konnte nicht erstellt werden' });
   }
 
   // Queue propagation with delay (SQS per-message delay)
@@ -301,19 +301,19 @@ async function handleUpdateSOS(
   if (!userId) return UNAUTHORIZED_RESPONSE;
 
   const sosId = event.pathParameters?.sosId;
-  if (!sosId) return jsonResponse(400, { error: 'sosId path parameter is required' });
+  if (!sosId) return jsonResponse(400, { error: 'Pfadparameter sosId ist erforderlich' });
 
   let requestBody: UpdateSOSRequest;
   try {
-    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    if (!event.body) return jsonResponse(400, { error: 'Request-Body ist erforderlich' });
     requestBody = JSON.parse(event.body) as UpdateSOSRequest;
   } catch {
-    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+    return jsonResponse(400, { error: 'Ungueltiges JSON im Request-Body' });
   }
 
   if (requestBody.geoLocation !== undefined && !isValidGeoLocation(requestBody.geoLocation)) {
     return jsonResponse(400, {
-      error: 'Valid geoLocation with lat (-90..90) and lng (-180..180) is required',
+      error: 'Gueltige geoLocation mit lat (-90..90) und lng (-180..180) ist erforderlich',
     });
   }
 
@@ -325,19 +325,19 @@ async function handleUpdateSOS(
       new GetCommand({ TableName: sosTableName, Key: { sosId } }),
     );
     if (!result.Item) {
-      return jsonResponse(404, { error: 'SOS event not found' });
+      return jsonResponse(404, { error: 'SOS-Ereignis nicht gefunden' });
     }
     if (result.Item.userId !== userId) {
-      return jsonResponse(403, { error: 'Not authorized to update this SOS event' });
+      return jsonResponse(403, { error: 'Nicht berechtigt, dieses SOS-Ereignis zu aktualisieren' });
     }
     sosRecord = result.Item;
   } catch (error) {
     console.error('Error retrieving SOS record:', error);
-    return jsonResponse(500, { error: 'Failed to retrieve SOS event' });
+    return jsonResponse(500, { error: 'SOS-Ereignis konnte nicht abgerufen werden' });
   }
 
   if (sosRecord.status === 'CANCELLED' || sosRecord.status === 'SUPERSEDED') {
-    return jsonResponse(410, { error: 'SOS event is no longer active' });
+    return jsonResponse(410, { error: 'SOS-Ereignis ist nicht mehr aktiv' });
   }
 
   const now = new Date().toISOString();
@@ -359,7 +359,7 @@ async function handleUpdateSOS(
     );
   } catch (error) {
     console.error('Error updating SOS record:', error);
-    return jsonResponse(500, { error: 'Failed to update SOS event' });
+    return jsonResponse(500, { error: 'SOS-Ereignis konnte nicht aktualisiert werden' });
   }
 
   // If already propagated, forward location update to platform
@@ -403,7 +403,7 @@ async function handleCancelSOS(
   if (!userId) return UNAUTHORIZED_RESPONSE;
 
   const sosId = event.pathParameters?.sosId;
-  if (!sosId) return jsonResponse(400, { error: 'sosId path parameter is required' });
+  if (!sosId) return jsonResponse(400, { error: 'Pfadparameter sosId ist erforderlich' });
 
   // Get SOS record and verify ownership
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -413,19 +413,19 @@ async function handleCancelSOS(
       new GetCommand({ TableName: sosTableName, Key: { sosId } }),
     );
     if (!result.Item) {
-      return jsonResponse(404, { error: 'SOS event not found' });
+      return jsonResponse(404, { error: 'SOS-Ereignis nicht gefunden' });
     }
     if (result.Item.userId !== userId) {
-      return jsonResponse(403, { error: 'Not authorized to cancel this SOS event' });
+      return jsonResponse(403, { error: 'Nicht berechtigt, dieses SOS-Ereignis abzubrechen' });
     }
     sosRecord = result.Item;
   } catch (error) {
     console.error('Error retrieving SOS record:', error);
-    return jsonResponse(500, { error: 'Failed to retrieve SOS event' });
+    return jsonResponse(500, { error: 'SOS-Ereignis konnte nicht abgerufen werden' });
   }
 
   if (sosRecord.status === 'CANCELLED' || sosRecord.status === 'SUPERSEDED') {
-    return jsonResponse(410, { error: 'SOS event is no longer active' });
+    return jsonResponse(410, { error: 'SOS-Ereignis ist nicht mehr aktiv' });
   }
 
   const now = new Date().toISOString();
@@ -445,7 +445,7 @@ async function handleCancelSOS(
     );
   } catch (error) {
     console.error('Error cancelling SOS record:', error);
-    return jsonResponse(500, { error: 'Failed to cancel SOS event' });
+    return jsonResponse(500, { error: 'SOS-Ereignis konnte nicht abgebrochen werden' });
   }
 
   // If already propagated to platform, cancel there too
@@ -493,7 +493,7 @@ async function handleImmediatePropagate(
   if (!userId) return UNAUTHORIZED_RESPONSE;
 
   const sosId = event.pathParameters?.sosId;
-  if (!sosId) return jsonResponse(400, { error: 'sosId path parameter is required' });
+  if (!sosId) return jsonResponse(400, { error: 'Pfadparameter sosId ist erforderlich' });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let sosRecord: Record<string, any>;
@@ -501,19 +501,19 @@ async function handleImmediatePropagate(
     const result = await docClient.send(
       new GetCommand({ TableName: sosTableName, Key: { sosId } }),
     );
-    if (!result.Item) return jsonResponse(404, { error: 'SOS event not found' });
+    if (!result.Item) return jsonResponse(404, { error: 'SOS-Ereignis nicht gefunden' });
     if (result.Item.userId !== userId) {
-      return jsonResponse(403, { error: 'Not authorized to propagate this SOS event' });
+      return jsonResponse(403, { error: 'Nicht berechtigt, dieses SOS-Ereignis weiterzuleiten' });
     }
     sosRecord = result.Item;
   } catch (error) {
     console.error('Error retrieving SOS record:', error);
-    return jsonResponse(500, { error: 'Failed to retrieve SOS event' });
+    return jsonResponse(500, { error: 'SOS-Ereignis konnte nicht abgerufen werden' });
   }
 
   if (sosRecord.status !== 'PENDING') {
     return jsonResponse(409, {
-      error: 'SOS event is not pending',
+      error: 'SOS-Ereignis ist nicht ausstehend',
       currentStatus: sosRecord.status,
     });
   }
@@ -532,7 +532,7 @@ async function handleImmediatePropagate(
 
     if (!platformResponse.success || !platformResponse.data?.sosId) {
       await updateSOSStatus(sosTableName, sosId, 'FAILED', now);
-      return jsonResponse(502, { error: 'Platform propagation failed' });
+      return jsonResponse(502, { error: 'Weiterleitung an die Plattform fehlgeschlagen' });
     }
 
     await docClient.send(
@@ -570,7 +570,7 @@ async function handleImmediatePropagate(
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'ConditionalCheckFailedException') {
-      return jsonResponse(409, { error: 'SOS event was cancelled or superseded during propagation' });
+      return jsonResponse(409, { error: 'SOS-Ereignis wurde waehrend der Weiterleitung abgebrochen oder ersetzt' });
     }
     console.error(`Error propagating SOS ${sosId}:`, error);
     try {
@@ -578,7 +578,7 @@ async function handleImmediatePropagate(
     } catch (updateError) {
       console.error(`Error marking SOS ${sosId} as FAILED:`, updateError);
     }
-    return jsonResponse(502, { error: 'Platform propagation failed' });
+    return jsonResponse(502, { error: 'Weiterleitung an die Plattform fehlgeschlagen' });
   }
 }
 
@@ -619,7 +619,7 @@ async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
   console.log("WEBHOOK_SECRET exists:", !!process.env.WEBHOOK_SECRET);
 
   if (!event.body) {
-    return jsonResponse(400, { error: 'Missing body' });
+    return jsonResponse(400, { error: 'Body fehlt' });
   }
 
   const headers = Object.fromEntries(
@@ -631,7 +631,7 @@ async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
   const result = verifySafeConnectWebhook(rawBody, event.headers, secret!);
 
    if (!result.valid) {
-    return jsonResponse(401, { error: 'Invalid signature' });
+    return jsonResponse(401, { error: 'Ungueltige Signatur' });
   }
 
   const { payload } = result;
@@ -644,7 +644,7 @@ async function handleWebhookSOS(event: APIGatewayProxyEventV2) {
     case 'SOS_CANCELLED':
       return handleIncomingCancel(payload);
     default:
-      return jsonResponse(400, { error: 'Unknown event type' });
+      return jsonResponse(400, { error: 'Unbekannter Ereignistyp' });
 
   }
 }
@@ -1011,10 +1011,10 @@ async function sendRequest<T>(
           try {
             resolve(JSON.parse(responseData) as T);
           } catch {
-            reject(new Error(`Failed to parse platform response: ${responseData}`));
+            reject(new Error(`Plattformantwort konnte nicht geparst werden: ${responseData}`));
           }
         } else {
-          reject(new Error(`Platform returned status ${res.statusCode}: ${responseData}`));
+          reject(new Error(`Plattform lieferte Status ${res.statusCode}: ${responseData}`));
         }
       });
     });

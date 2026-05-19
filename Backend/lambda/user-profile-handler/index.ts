@@ -176,7 +176,7 @@ const getEnv = (name: string): string | undefined => process.env[name];
 const missingEnvResponse = (name: string): APIGatewayProxyResultV2 => ({
   statusCode: 500,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: `Server configuration error: ${name} not set` }),
+  body: JSON.stringify({ error: `Serverkonfigurationsfehler: ${name} ist nicht gesetzt` }),
 });
 
 const jsonResponse = (statusCode: number, body: unknown): APIGatewayProxyResultV2 => ({
@@ -195,7 +195,7 @@ const getAuthenticatedUserId = (event: APIGatewayProxyEventV2): string | undefin
 const UNAUTHORIZED_RESPONSE: APIGatewayProxyResultV2 = {
   statusCode: 401,
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ error: 'Unauthorized' }),
+  body: JSON.stringify({ error: 'Nicht autorisiert' }),
 };
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
@@ -239,7 +239,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return handleDeleteContact(event, tableName);
 
     default:
-      return jsonResponse(404, { error: 'Route not found' });
+      return jsonResponse(404, { error: 'Route nicht gefunden' });
   }
 };
 
@@ -260,7 +260,7 @@ async function handleGetMe(
     );
 
     if (!result.Item) {
-      return jsonResponse(404, { error: 'User profile not found' });
+      return jsonResponse(404, { error: 'Benutzerprofil nicht gefunden' });
     }
 
     return jsonResponse(200, {
@@ -272,8 +272,8 @@ async function handleGetMe(
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user profile',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerprofil konnte nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -291,18 +291,18 @@ async function handleUpdateMe(
 
   let body: { displayName?: unknown };
   try {
-    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    if (!event.body) return jsonResponse(400, { error: 'Request-Body ist erforderlich' });
     body = JSON.parse(event.body) as { displayName?: unknown };
   } catch {
-    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+    return jsonResponse(400, { error: 'Ungueltiges JSON im Request-Body' });
   }
 
   const { displayName } = body;
   if (displayName === undefined) {
-    return jsonResponse(400, { error: 'displayName is required' });
+    return jsonResponse(400, { error: 'displayName ist erforderlich' });
   }
   if (typeof displayName !== 'string' || displayName.trim().length === 0) {
-    return jsonResponse(400, { error: 'displayName must be a non-empty string' });
+    return jsonResponse(400, { error: 'displayName muss eine nicht leere Zeichenkette sein' });
   }
   const trimmedName = displayName.trim();
 
@@ -312,14 +312,14 @@ async function handleUpdateMe(
     const result = await docClient.send(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
-    if (!result.Item) return jsonResponse(404, { error: 'User profile not found' });
+    if (!result.Item) return jsonResponse(404, { error: 'Benutzerprofil nicht gefunden' });
     email = result.Item.email as string | undefined;
     safeWalkId = result.Item.safeWalkId as string | undefined;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user profile',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerprofil konnte nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -338,8 +338,8 @@ async function handleUpdateMe(
   } catch (error) {
     console.error('Error updating user profile in DynamoDB:', error);
     return jsonResponse(500, {
-      error: 'Failed to update user profile',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerprofil konnte nicht aktualisiert werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -394,13 +394,13 @@ async function handleDeleteMe(
     const result = await docClient.send(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
-    if (!result.Item) return jsonResponse(404, { error: 'User profile not found' });
+    if (!result.Item) return jsonResponse(404, { error: 'Benutzerprofil nicht gefunden' });
     email = result.Item.email as string | undefined;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user profile',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerprofil konnte nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -412,8 +412,8 @@ async function handleDeleteMe(
   } catch (error) {
     console.error('Error deleting user profile from DynamoDB:', error);
     return jsonResponse(500, {
-      error: 'Failed to delete user account',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerkonto konnte nicht geloescht werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -453,20 +453,20 @@ async function handleGetSharingCode(
     );
 
     if (!result.Item) {
-      return jsonResponse(404, { error: 'User not found' });
+      return jsonResponse(404, { error: 'Benutzer nicht gefunden' });
     }
 
     const { sharingCode, sharingCodeExpiresAt } = result.Item;
     if (!sharingCode || !sharingCodeExpiresAt) {
-      return jsonResponse(404, { error: 'No sharing code found for this user' });
+      return jsonResponse(404, { error: 'Kein Sharing-Code fuer diesen Nutzer gefunden' });
     }
 
     return jsonResponse(200, { sharingCode, sharingCodeExpiresAt });
   } catch (error) {
     console.error('Error fetching sharing code:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve sharing code',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Sharing-Code konnte nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -491,14 +491,14 @@ async function handleGenerateSharingCode(
     );
 
     if (!result.Item?.safeWalkId) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
     console.error('Error retrieving user:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user data',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerdaten konnten nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -516,8 +516,8 @@ async function handleGenerateSharingCode(
     if (!platformResponse.success || !platformResponse.data?.sharingCode || !platformResponse.data?.expiresAt) {
       console.error('Invalid platform sharing code response:', platformResponse);
       return jsonResponse(502, {
-        error: 'Invalid platform response',
-        details: 'Sharing code response missing required fields',
+        error: 'Ungueltige Plattformantwort',
+        details: 'Sharing-Code-Antwort fehlt Pflichtfelder',
       });
     }
 
@@ -542,8 +542,8 @@ async function handleGenerateSharingCode(
   } catch (error) {
     console.error('Error generating sharing code:', error);
     return jsonResponse(502, {
-      error: 'Failed to generate sharing code',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Sharing-Code konnte nicht erstellt werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -563,14 +563,14 @@ async function handleConnectWithCode(
 
   let requestBody: ConnectWithCodeRequest;
   try {
-    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    if (!event.body) return jsonResponse(400, { error: 'Request-Body ist erforderlich' });
     requestBody = JSON.parse(event.body) as ConnectWithCodeRequest;
   } catch {
-    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+    return jsonResponse(400, { error: 'Ungueltiges JSON im Request-Body' });
   }
 
   if (!requestBody.sharingCode || typeof requestBody.sharingCode !== 'string') {
-    return jsonResponse(400, { error: 'sharingCode is required and must be a string' });
+    return jsonResponse(400, { error: 'sharingCode ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   let safeWalkId: string;
@@ -580,14 +580,14 @@ async function handleConnectWithCode(
     );
 
     if (!result.Item?.safeWalkId) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
     console.error('Error retrieving user:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user data',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerdaten konnten nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -607,7 +607,7 @@ async function handleConnectWithCode(
 
     if (!platformResponse.success) {
       console.error('Platform rejected trusted contact registration:', platformResponse);
-      return jsonResponse(502, { error: 'Platform rejected trusted contact registration' });
+      return jsonResponse(502, { error: 'Plattform hat die Registrierung der Vertrauensperson abgelehnt' });
     }
 
     console.log('Successfully registered as trusted contact for user:', userId);
@@ -615,8 +615,8 @@ async function handleConnectWithCode(
   } catch (error) {
     console.error('Error registering as trusted contact:', error);
     return jsonResponse(502, {
-      error: 'Failed to register as trusted contact',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Registrierung als Vertrauensperson fehlgeschlagen',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -636,14 +636,14 @@ async function handleConnectBack(
 
   let requestBody: ConnectBackRequest;
   try {
-    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    if (!event.body) return jsonResponse(400, { error: 'Request-Body ist erforderlich' });
     requestBody = JSON.parse(event.body) as ConnectBackRequest;
   } catch {
-    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+    return jsonResponse(400, { error: 'Ungueltiges JSON im Request-Body' });
   }
 
   if (!requestBody.peerSafeWalkId || typeof requestBody.peerSafeWalkId !== 'string') {
-    return jsonResponse(400, { error: 'peerSafeWalkId is required and must be a string' });
+    return jsonResponse(400, { error: 'peerSafeWalkId ist erforderlich und muss eine Zeichenkette sein' });
   }
 
   let thisUserSafeWalkId: string;
@@ -653,15 +653,15 @@ async function handleConnectBack(
     );
 
     if (!result.Item?.safeWalkId) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
 
     thisUserSafeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
     console.error('Error retrieving user:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user data',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerdaten konnten nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -681,7 +681,7 @@ async function handleConnectBack(
 
     if (!platformResponse.success) {
       console.error('Platform rejected reverse trusted contact registration:', platformResponse);
-      return jsonResponse(502, { error: 'Platform rejected reverse trusted contact registration' });
+      return jsonResponse(502, { error: 'Plattform hat die Rueckverknuepfung der Vertrauensperson abgelehnt' });
     }
 
     console.log('Successfully added reverse trusted contact for user:', userId);
@@ -689,8 +689,8 @@ async function handleConnectBack(
   } catch (error) {
     console.error('Error adding reverse trusted contact:', error);
     return jsonResponse(502, {
-      error: 'Failed to add trusted contact from incoming share',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Vertrauensperson aus eingehendem Share konnte nicht hinzugefuegt werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -714,14 +714,14 @@ async function handleListContacts(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
     if (!result.Item?.safeWalkId) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
     console.error('Error retrieving user:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user data',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerdaten konnten nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -734,7 +734,7 @@ async function handleListContacts(
     );
 
     if (!platformResponse.success) {
-      return jsonResponse(502, { error: 'Platform rejected contacts list request' });
+      return jsonResponse(502, { error: 'Plattform hat die Anfrage der Kontaktliste abgelehnt' });
     }
 
     const rawContacts = platformResponse.data.contacts;
@@ -743,8 +743,8 @@ async function handleListContacts(
   } catch (error) {
     console.error('Error fetching contacts:', error);
     return jsonResponse(502, {
-      error: 'Failed to fetch trusted contacts',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Vertrauenspersonen konnten nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -760,24 +760,24 @@ async function handleUpdateContactSettings(
   if (!apiKey) return missingEnvResponse('API_KEY');
 
   const contactId = event.pathParameters?.contactId;
-  if (!contactId) return jsonResponse(400, { error: 'contactId path parameter is required' });
+  if (!contactId) return jsonResponse(400, { error: 'Pfadparameter contactId ist erforderlich' });
 
   const userId = getAuthenticatedUserId(event);
   if (!userId) return UNAUTHORIZED_RESPONSE;
 
   let requestBody: UpdateContactSettingsRequest;
   try {
-    if (!event.body) return jsonResponse(400, { error: 'Request body is required' });
+    if (!event.body) return jsonResponse(400, { error: 'Request-Body ist erforderlich' });
     requestBody = JSON.parse(event.body) as UpdateContactSettingsRequest;
   } catch {
-    return jsonResponse(400, { error: 'Invalid JSON in request body' });
+    return jsonResponse(400, { error: 'Ungueltiges JSON im Request-Body' });
   }
 
   if (typeof requestBody.locationSharing !== 'boolean') {
-    return jsonResponse(400, { error: 'locationSharing is required and must be a boolean' });
+    return jsonResponse(400, { error: 'locationSharing ist erforderlich und muss ein Boolean sein' });
   }
   if (typeof requestBody.sosSharing !== 'boolean') {
-    return jsonResponse(400, { error: 'sosSharing is required and must be a boolean' });
+    return jsonResponse(400, { error: 'sosSharing ist erforderlich und muss ein Boolean sein' });
   }
 
   let safeWalkId: string;
@@ -786,14 +786,14 @@ async function handleUpdateContactSettings(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
     if (!result.Item?.safeWalkId) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
     console.error('Error retrieving user:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user data',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerdaten konnten nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -813,7 +813,7 @@ async function handleUpdateContactSettings(
     );
 
     if (!platformResponse.success) {
-      return jsonResponse(502, { error: 'Platform rejected contact settings update' });
+      return jsonResponse(502, { error: 'Plattform hat die Aktualisierung der Kontakteinstellungen abgelehnt' });
     }
 
     console.log('Contact settings updated for contactId:', contactId, 'by user:', userId);
@@ -821,8 +821,8 @@ async function handleUpdateContactSettings(
   } catch (error) {
     console.error('Error updating contact settings:', error);
     return jsonResponse(502, {
-      error: 'Failed to update contact settings',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Kontakteinstellungen konnten nicht aktualisiert werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -838,7 +838,7 @@ async function handleDeleteContact(
   if (!apiKey) return missingEnvResponse('API_KEY');
 
   const contactId = event.pathParameters?.contactId;
-  if (!contactId) return jsonResponse(400, { error: 'contactId path parameter is required' });
+  if (!contactId) return jsonResponse(400, { error: 'Pfadparameter contactId ist erforderlich' });
 
   const userId = getAuthenticatedUserId(event);
   if (!userId) return UNAUTHORIZED_RESPONSE;
@@ -849,14 +849,14 @@ async function handleDeleteContact(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
     if (!result.Item?.safeWalkId) {
-      return jsonResponse(400, { error: 'User has not been registered on the platform yet' });
+      return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
     safeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
     console.error('Error retrieving user:', error);
     return jsonResponse(500, {
-      error: 'Failed to retrieve user data',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Benutzerdaten konnten nicht abgerufen werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
@@ -872,7 +872,7 @@ async function handleDeleteContact(
     );
 
     if (!platformResponse.success) {
-      return jsonResponse(502, { error: 'Platform rejected contact deletion' });
+      return jsonResponse(502, { error: 'Plattform hat das Loeschen der Vertrauensperson abgelehnt' });
     }
 
     console.log('Trusted contact deleted, contactId:', contactId, 'by user:', userId);
@@ -880,8 +880,8 @@ async function handleDeleteContact(
   } catch (error) {
     console.error('Error deleting contact:', error);
     return jsonResponse(502, {
-      error: 'Failed to delete trusted contact',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Vertrauensperson konnte nicht geloescht werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 }
@@ -962,8 +962,8 @@ async function handleRegister(
     } else {
       console.error('Error creating user profile:', error);
       return jsonResponse(500, {
-        error: 'Failed to create user profile',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Benutzerprofil konnte nicht erstellt werden',
+        details: error instanceof Error ? error.message : 'Unbekannter Fehler',
       });
     }
   }
@@ -1020,7 +1020,7 @@ async function handleRegister(
           message: isNewProfile ? 'User profile created' : 'User profile already exists',
           userId,
           platformRegistrationError:
-            'Platform registration failed – please retry via POST /register/platform',
+            'Plattformregistrierung fehlgeschlagen – bitte erneut ueber POST /register/platform versuchen',
         });
       }
 
@@ -1045,7 +1045,7 @@ async function handleRegister(
         message: isNewProfile ? 'User profile created' : 'User profile already exists',
         userId,
         platformRegistrationError:
-          'Sharing code generation failed – please retry via POST /register/platform',
+          'Sharing-Code-Erstellung fehlgeschlagen – bitte erneut ueber POST /register/platform versuchen',
       });
     }
 
@@ -1082,7 +1082,7 @@ async function handleRegister(
       message: isNewProfile ? 'User profile created' : 'User profile already exists',
       userId,
       platformRegistrationError:
-        'Platform registration failed – please retry via POST /register/platform',
+        'Plattformregistrierung fehlgeschlagen – bitte erneut ueber POST /register/platform versuchen',
     });
   }
 }
@@ -1131,10 +1131,10 @@ async function sendRequest<T>(url: string, method: HttpMethod, apiKey: string, p
           try {
             resolve(JSON.parse(responseData) as T);
           } catch {
-            reject(new Error(`Failed to parse platform response: ${responseData}`));
+            reject(new Error(`Plattformantwort konnte nicht geparst werden: ${responseData}`));
           }
         } else {
-          reject(new Error(`Platform returned status ${res.statusCode}: ${responseData}`));
+          reject(new Error(`Plattform lieferte Status ${res.statusCode}: ${responseData}`));
         }
       });
     });

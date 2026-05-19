@@ -49,7 +49,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Server configuration error: PLATFORM_DOMAIN not set' }),
+      body: JSON.stringify({ error: 'Serverkonfigurationsfehler: PLATFORM_DOMAIN ist nicht gesetzt' }),
     };
   }
 
@@ -58,7 +58,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Server configuration error: VENDOR_ID not set' }),
+      body: JSON.stringify({ error: 'Serverkonfigurationsfehler: VENDOR_ID ist nicht gesetzt' }),
     };
   }
 
@@ -67,7 +67,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Server configuration error: TABLE_NAME not set' }),
+      body: JSON.stringify({ error: 'Serverkonfigurationsfehler: TABLE_NAME ist nicht gesetzt' }),
     };
   }
 
@@ -76,7 +76,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Server configuration error: API_KEY not set' }),
+      body: JSON.stringify({ error: 'Serverkonfigurationsfehler: API_KEY ist nicht gesetzt' }),
     };
   }
 
@@ -90,7 +90,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     return {
       statusCode: 401,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Unauthorized' }),
+      body: JSON.stringify({ error: 'Nicht autorisiert' }),
     };
   }
 
@@ -159,8 +159,8 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
           statusCode: 502,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            error: 'Invalid platform response',
-            details: 'Registration response missing required field: safeWalkId',
+            error: 'Ungueltige Plattformantwort',
+            details: 'Registrierungsantwort fehlt Pflichtfeld: safeWalkId',
           }),
         };
       }
@@ -183,8 +183,8 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
         statusCode: 502,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          error: 'Invalid platform response',
-          details: 'Sharing code response missing required fields: sharingCode or expiresAt',
+          error: 'Ungueltige Plattformantwort',
+          details: 'Sharing-Code-Antwort fehlt Pflichtfelder: sharingCode oder expiresAt',
         }),
       };
     }
@@ -227,8 +227,8 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       statusCode: 502,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        error: 'Failed to register with platform',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Registrierung bei der Plattform fehlgeschlagen',
+        details: error instanceof Error ? error.message : 'Unbekannter Fehler',
       }),
     };
   }
@@ -277,10 +277,10 @@ async function sendRequest<T>(domain: string, payload: unknown, apiKey: string):
           try {
             resolve(JSON.parse(responseData) as T);
           } catch (error) {
-            reject(new Error(`Failed to parse platform response: ${responseData}`));
+            reject(new Error(`Plattformantwort konnte nicht geparst werden: ${responseData}`));
           }
         } else {
-          reject(new Error(`Platform returned status ${res.statusCode}: ${responseData}`));
+          reject(new Error(`Plattform lieferte Status ${res.statusCode}: ${responseData}`));
         }
       });
     });

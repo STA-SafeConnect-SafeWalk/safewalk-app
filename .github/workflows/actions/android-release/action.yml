@@ -1,0 +1,73 @@
+name: Build Android APK
+description: Build Android APK for release
+
+inputs:
+  firebase-env-json:
+    required: true
+  google-services-json:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+
+    - name: Verify toolchain
+      working-directory: Frontend/safewalk
+      shell: bash
+      run: |
+        java -version
+        flutter --version
+
+    - name: Prepare Firebase env
+      working-directory: Frontend/safewalk
+      env:
+        FIREBASE_ENV_JSON: ${{ inputs.firebase-env-json }}
+        GOOGLE_SERVICES_JSON: ${{ inputs.google-services-json }}
+      shell: bash
+      run: |
+        if [ ! -d "android/app" ]; then
+          echo "android/app directory is missing. Ensure Flutter project is checked out correctly." >&2
+          exit 1
+        fi
+        if [ -z "$FIREBASE_ENV_JSON" ]; then
+          echo "FIREBASE_ENV_JSON secret is missing" >&2
+          exit 1
+        fi
+        echo "$FIREBASE_ENV_JSON" > firebase.env.json
+        
+        if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+          echo "GOOGLE_SERVICES_JSON secret is missing" >&2
+          exit 1
+        fi
+        echo "$GOOGLE_SERVICES_JSON" > google-services.json
+        mv google-services.json android/app/
+
+    - name: Install dependencies
+      working-directory: Frontend/safewalk
+      shell: bash
+      run: flutter pub get
+
+    - name: Build release APK
+      working-directory: Frontend/safewalk
+      shell: bash
+      run: flutter build apk --dart-define-from-file=firebase.env.json
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: safewalk-app-release-apk
+        path: Frontend/safewalk/build/app/outputs/flutter-apk/app-release.apk
+

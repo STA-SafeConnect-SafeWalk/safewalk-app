@@ -66,10 +66,10 @@ export const handler = async (event: Event | SNSEvent): Promise<Result | void> =
     if (path === '/notifications/send' && method === 'POST') {
       return sendNotification(userId, apiEvent);
     }
-    return json(404, { message: 'Not found' });
+    return json(404, { message: 'Nicht gefunden' });
   } catch (err) {
     console.error('Unhandled error:', err);
-    return json(500, { message: 'Internal server error' });
+    return json(500, { message: 'Interner Serverfehler' });
   }
 };
 
@@ -79,11 +79,11 @@ async function registerDevice(userId: string, event: Event): Promise<Result> {
   const platform = body.platform as string | undefined;
 
   if (!deviceToken || !platform) {
-    return json(400, { message: 'deviceToken and platform are required' });
+    return json(400, { message: 'deviceToken und platform sind erforderlich' });
   }
 
   if (!FCM_PLATFORM_APP_ARN) {
-    return json(503, { message: 'FCM Platform Application ARN is not configured' });
+    return json(503, { message: 'FCM Platform Application ARN ist nicht konfiguriert' });
   }
 
   const endpointResponse = await sns.send(
@@ -130,7 +130,7 @@ async function unregisterDevice(
   const deviceToken = body.deviceToken as string | undefined;
 
   if (!deviceToken) {
-    return json(400, { message: 'deviceToken is required' });
+    return json(400, { message: 'deviceToken ist erforderlich' });
   }
 
   const record = await ddb.send(
@@ -172,7 +172,7 @@ async function sendNotification(
 
   if (!targetUserId || !title || !message) {
     return json(400, {
-      message: 'targetUserId, title, and body are required',
+      message: 'targetUserId, title und body sind erforderlich',
     });
   }
 
@@ -185,7 +185,7 @@ async function sendNotification(
   );
 
   if (!devices.Items || devices.Items.length === 0) {
-    return json(404, { message: 'No registered devices for target user' });
+    return json(404, { message: 'Keine registrierten Geraete fuer den Zielnutzer' });
   }
 
   const results = await Promise.allSettled(

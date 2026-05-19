@@ -208,12 +208,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: const Text('Passwort vergessen?'),
           ),
         );
-        widgets.add(
-          TextButton(
-            onPressed: vm.isLoading ? null : () => vm.skipLogin(),
-            child: const Text('Skip Login (Dev)'),
-          ),
-        );
         break;
 
       case AuthMode.signUp:

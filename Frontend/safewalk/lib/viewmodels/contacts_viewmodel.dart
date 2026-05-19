@@ -81,8 +81,7 @@ class ContactsViewModel extends ChangeNotifier {
     if (_codeExpiresAt == null || activeCode == null) return false;
     return _codeExpiresAt!
             .difference(DateTime.now())
-            .compareTo(const Duration(hours: 1)) <
-        0;
+            .compareTo(const Duration(hours: 1)) < 0;
   }
 
   // ─── Contacts list ───────────────────────────────────────────────────
