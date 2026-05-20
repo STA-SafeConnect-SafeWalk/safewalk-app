@@ -402,8 +402,8 @@ describe('user-profile-handler', () => {
       const contact = body.contacts[0];
       expect(contact.safeWalkId).toBe('sw-peer');
       expect(contact.isOutgoing).toBe(true);
-      expect(contact.sharesBackLocation).toBe(true); // outgoing entry
-      expect(contact.locationSharing).toBe(false); // incoming entry
+      expect(contact.locationSharing).toBe(true); // outgoing entry: user's own sharing settings
+      expect(contact.sharesBackLocation).toBe(false); // incoming entry: partner's sharing settings
     });
   });
 
