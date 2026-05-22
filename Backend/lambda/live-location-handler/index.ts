@@ -150,10 +150,11 @@ async function resolveContactsWhoShareLocation(
     byPartner.set(partnerId, entry);
   }
 
-  for (const [partnerId, { outgoing }] of byPartner.entries()) {
-    // outgoing.locationSharing means the contact configured sharing TO the requesting user
-    if (outgoing?.locationSharing) {
-      sharingContacts.set(partnerId, outgoing.peerName ?? 'Unbenannte Kontaktperson');
+  for (const [partnerId, { outgoing, incoming }] of byPartner.entries()) {
+    // incoming entry: the partner is the requester, so incoming.locationSharing is the partner's own sharing preference
+    if (incoming?.locationSharing) {
+      const name = incoming.peerName ?? outgoing?.peerName ?? 'Unbenannte Kontaktperson';
+      sharingContacts.set(partnerId, name);
     }
   }
 

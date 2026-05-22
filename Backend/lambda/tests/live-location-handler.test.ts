@@ -238,12 +238,12 @@ describe('live-location-handler', () => {
           {
             contactId: 'c1',
             status: 'active',
-            requesterSafeWalkId: 'sw-abc',
-            targetSafeWalkId: 'sw-contact1',
+            requesterSafeWalkId: 'sw-contact1', // partner is the requester → partner's locationSharing preference
+            targetSafeWalkId: 'sw-abc',
             platformId: 'p1',
-            locationSharing: true,
+            locationSharing: true,               // sw-contact1 shares location WITH sw-abc
             sosSharing: true,
-            direction: 'outgoing',
+            direction: 'incoming',               // from sw-abc's perspective
             peerName: 'Contact One',
             createdAt: '2026-01-01',
             updatedAt: '2026-01-01',
@@ -251,12 +251,12 @@ describe('live-location-handler', () => {
           {
             contactId: 'c2',
             status: 'active',
-            requesterSafeWalkId: 'sw-abc',
-            targetSafeWalkId: 'sw-contact2',
+            requesterSafeWalkId: 'sw-contact2', // partner is the requester
+            targetSafeWalkId: 'sw-abc',
             platformId: 'p1',
-            locationSharing: false,
+            locationSharing: false,              // sw-contact2 does NOT share location with sw-abc
             sosSharing: true,
-            direction: 'outgoing',
+            direction: 'incoming',
             peerName: 'Contact Two',
             createdAt: '2026-01-01',
             updatedAt: '2026-01-01',
@@ -343,12 +343,12 @@ describe('live-location-handler', () => {
             {
               contactId: 'c1',
               status: 'active',
-              requesterSafeWalkId: 'sw-abc',
-              targetSafeWalkId: 'sw-contact1',
+              requesterSafeWalkId: 'sw-contact1',
+              targetSafeWalkId: 'sw-abc',
               platformId: 'p1',
               locationSharing: true,
               sosSharing: true,
-              direction: 'outgoing',
+              direction: 'incoming',
               peerName: 'Contact One',
               createdAt: '2026-01-01',
               updatedAt: '2026-01-01',
@@ -417,12 +417,12 @@ describe('live-location-handler', () => {
             {
               contactId: 'c1',
               status: 'active',
-              requesterSafeWalkId: 'sw-abc',
-              targetSafeWalkId: 'sw-target',
+              requesterSafeWalkId: 'sw-target', // sw-target is the requester, so locationSharing is their preference
+              targetSafeWalkId: 'sw-abc',
               platformId: 'p1',
-              locationSharing: true,
+              locationSharing: true,             // sw-target shares location WITH sw-abc
               sosSharing: true,
-              direction: 'outgoing',
+              direction: 'incoming',             // from sw-abc's perspective
               peerName: 'Target User',
               createdAt: '2026-01-01',
               updatedAt: '2026-01-01',
@@ -469,12 +469,12 @@ describe('live-location-handler', () => {
             {
               contactId: 'c1',
               status: 'active',
-              requesterSafeWalkId: 'sw-abc',
-              targetSafeWalkId: 'sw-target',
+              requesterSafeWalkId: 'sw-target',
+              targetSafeWalkId: 'sw-abc',
               platformId: 'p1',
-              locationSharing: false,
+              locationSharing: false,            // sw-target does NOT share location with sw-abc
               sosSharing: true,
-              direction: 'outgoing',
+              direction: 'incoming',
               peerName: 'Target User',
               createdAt: '2026-01-01',
               updatedAt: '2026-01-01',
@@ -505,12 +505,12 @@ describe('live-location-handler', () => {
             {
               contactId: 'c1',
               status: 'active',
-              requesterSafeWalkId: 'sw-abc',
-              targetSafeWalkId: 'sw-target',
+              requesterSafeWalkId: 'sw-target',
+              targetSafeWalkId: 'sw-abc',
               platformId: 'p1',
               locationSharing: true,
               sosSharing: true,
-              direction: 'outgoing',
+              direction: 'incoming',
               peerName: 'Target User',
               createdAt: '2026-01-01',
               updatedAt: '2026-01-01',
@@ -553,12 +553,12 @@ describe('live-location-handler', () => {
             {
               contactId: 'c1',
               status: 'active',
-              requesterSafeWalkId: 'sw-abc',
-              targetSafeWalkId: 'sw-target',
+              requesterSafeWalkId: 'sw-target',
+              targetSafeWalkId: 'sw-abc',
               platformId: 'p1',
               locationSharing: true,
               sosSharing: true,
-              direction: 'outgoing',
+              direction: 'incoming',
               peerName: 'Target User',
               createdAt: '2026-01-01',
               updatedAt: '2026-01-01',
