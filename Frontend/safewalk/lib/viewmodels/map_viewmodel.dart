@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:safewalk/models/map_models.dart';
 import 'package:safewalk/services/app_config_service.dart';
 import 'package:safewalk/services/api_service.dart';
+import 'package:safewalk/services/map_theme_service.dart';
 import 'package:safewalk/services/mapbox_places_service.dart';
 
 class LatLng {
@@ -40,13 +41,20 @@ class MapViewModel extends ChangeNotifier {
     ApiService? apiService,
     MapboxPlacesService? mapboxPlacesService,
     AppConfigService? appConfigService,
+    MapThemeService? mapThemeService,
   }) : _apiService = apiService ?? ApiService(),
        _mapboxPlacesService = mapboxPlacesService ?? MapboxPlacesService(),
-       _appConfigService = appConfigService ?? AppConfigService();
+       _appConfigService = appConfigService ?? AppConfigService(),
+       _mapThemeService = mapThemeService ?? MapThemeService() {
+    _mapThemeService.addListener(_onThemeChanged);
+  }
 
   final ApiService _apiService;
   final MapboxPlacesService _mapboxPlacesService;
   final AppConfigService _appConfigService;
+  final MapThemeService _mapThemeService;
+
+  void _onThemeChanged() => notifyListeners();
 
   static const _defaultCenter = LatLng(48.137154, 11.576124);
   static const _defaultZoom = 13.0;
@@ -213,7 +221,7 @@ class MapViewModel extends ChangeNotifier {
 
   bool get isMapboxConfigured => _mapboxPlacesService.isConfigured;
   String get mapboxAccessToken => _mapboxPlacesService.accessToken;
-  String get mapboxStyleUri => MapboxPlacesService.styleUri;
+  String get mapboxStyleUri => _mapThemeService.activeStyleUri;
 
   List<MapLayerMetadata> get selectedLayers => _publicDataLayers
       .where((layer) => layer.isSelected)
@@ -863,6 +871,7 @@ class MapViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _mapThemeService.removeListener(_onThemeChanged);
     _searchTimer?.cancel();
     stopSocialPolling();
     super.dispose();

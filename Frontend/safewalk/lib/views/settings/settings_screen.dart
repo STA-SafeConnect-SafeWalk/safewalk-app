@@ -3,6 +3,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:safewalk/core/constants/map_style_config.dart';
+import 'package:safewalk/services/map_theme_service.dart';
 import 'package:safewalk/viewmodels/login_viewmodel.dart';
 import 'package:safewalk/viewmodels/settings_viewmodel.dart';
 
@@ -87,6 +89,11 @@ class _SettingsView extends StatelessWidget {
                           displayName: vm.displayName,
                           email: vm.email,
                         ),
+
+                        const SizedBox(height: 20),
+
+                        // ── Map theme ─────────────────────────────────
+                        const _MapThemeCard(),
 
                         const SizedBox(height: 20),
 
@@ -526,6 +533,170 @@ class _ActionRow extends StatelessWidget {
       ],
     );
   }
+}
+
+// ─── Map Theme Card ───────────────────────────────────────────────────────────
+
+class _MapThemeCard extends StatelessWidget {
+  const _MapThemeCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final service = context.watch<MapThemeService>();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(color: _kCardShadow, blurRadius: 20, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0x1A00666B),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.map_outlined,
+                  size: 20,
+                  color: _kTealDark,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Karten-Thema',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: _kTextDark,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Passe den Kartenstil deinen Vorlieben an.',
+                      style: TextStyle(fontSize: 12, color: _kTealMid),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _ThemeOption(
+            icon: Icons.wb_sunny_rounded,
+            label: 'Immer Tag',
+            description: 'Heller Kartenstil zu jeder Zeit.',
+            selected: service.mode == MapThemeMode.alwaysDay,
+            onTap: () => service.setMode(MapThemeMode.alwaysDay),
+          ),
+          const _OptionDivider(),
+          _ThemeOption(
+            icon: Icons.access_time_rounded,
+            label: 'Tageszeit',
+            description: 'Morgen, Tag, Abend, Nacht – wechselt automatisch.',
+            selected: service.mode == MapThemeMode.timeBased,
+            onTap: () => service.setMode(MapThemeMode.timeBased),
+          ),
+          const _OptionDivider(),
+          _ThemeOption(
+            icon: Icons.contrast_rounded,
+            label: 'System',
+            description: 'Folgt dem Hell-/Dunkel-Modus deines Geräts.',
+            selected: service.mode == MapThemeMode.systemTheme,
+            onTap: () => service.setMode(MapThemeMode.systemTheme),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeOption extends StatelessWidget {
+  const _ThemeOption({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String description;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: selected ? _kTealDark : _kTealMid,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? _kTealDark : _kTextDark,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: const TextStyle(fontSize: 12, color: _kTealMid),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check_circle_rounded, color: _kTealDark, size: 22)
+            else
+              Icon(
+                Icons.radio_button_unchecked_rounded,
+                color: _kTealMid.withValues(alpha: 0.5),
+                size: 22,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OptionDivider extends StatelessWidget {
+  const _OptionDivider();
+
+  @override
+  Widget build(BuildContext context) => const Divider(
+        height: 1,
+        thickness: 1,
+        color: _kDivider,
+      );
 }
 
 // ─── Avatar (same design as on the Contacts screen) ──────────────────────────

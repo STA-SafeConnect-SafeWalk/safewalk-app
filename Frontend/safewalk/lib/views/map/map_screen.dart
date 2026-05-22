@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:safewalk/models/map_models.dart';
+import 'package:safewalk/services/map_theme_service.dart';
 import 'package:safewalk/viewmodels/map_viewmodel.dart';
 
 const _kMapBackground = Color(0xFFF5F8F8);
@@ -105,6 +106,7 @@ class _MapScreenState extends State<MapScreen> {
   LatLng? _lastSearchLocation;
   int _lastRenderGeneration = 0;
   final Map<String, Uint8List> _markerIconCache = <String, Uint8List>{};
+  String? _lastAppliedStyleUri;
 
   /// Smooth SOS halo pulse — uses a high-frequency Ticker via Timer.periodic.
   Timer? _sosPulseTimer;
@@ -121,8 +123,22 @@ class _MapScreenState extends State<MapScreen> {
         MapboxOptions.setAccessToken(vm.mapboxAccessToken);
       }
       vm.addListener(_onViewModelChanged);
+      context.read<MapThemeService>().addListener(_onThemeChanged);
       await vm.initialize();
     });
+  }
+
+  /// Called directly by [MapThemeService] when the active style URI changes.
+  void _onThemeChanged() => _applyCurrentStyle();
+
+  /// Applies the current style to the live map if it differs from the last
+  /// applied one. Safe to call at any time — no-ops if the map is not ready.
+  void _applyCurrentStyle() {
+    if (_mapboxMap == null) return;
+    final newStyle = context.read<MapThemeService>().activeStyleUri;
+    if (newStyle == _lastAppliedStyleUri) return;
+    _lastAppliedStyleUri = newStyle;
+    unawaited(_mapboxMap!.loadStyleURI(newStyle));
   }
 
   void _onViewModelChanged() {
@@ -234,6 +250,7 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     context.read<MapViewModel>().removeListener(_onViewModelChanged);
+    context.read<MapThemeService>().removeListener(_onThemeChanged);
     _sosPulseTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -316,6 +333,14 @@ class _MapScreenState extends State<MapScreen> {
 
   void _onMapCreated(MapboxMap map) async {
     _mapboxMap = map;
+    // Sync in case the theme changed while the map widget was still loading.
+    final desiredStyle = context.read<MapThemeService>().activeStyleUri;
+    _lastAppliedStyleUri = desiredStyle;
+    // The MapWidget was already initialised with vm.mapboxStyleUri; only
+    // reload here if the theme changed in the gap before onMapCreated fired.
+    if (desiredStyle != context.read<MapViewModel>().mapboxStyleUri) {
+      unawaited(map.loadStyleURI(desiredStyle));
+    }
     _pointAnnotationManager = await map.annotations
         .createPointAnnotationManager();
     _reportPinAnnotationManager = await map.annotations

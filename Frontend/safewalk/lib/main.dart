@@ -16,6 +16,7 @@ import 'package:safewalk/services/auth_service.dart';
 import 'package:safewalk/services/headphone_service.dart';
 import 'package:safewalk/services/mapbox_places_service.dart';
 import 'package:safewalk/services/push_notification_service.dart';
+import 'package:safewalk/services/map_theme_service.dart';
 import 'package:safewalk/viewmodels/home_viewmodel.dart';
 import 'package:safewalk/viewmodels/login_viewmodel.dart';
 import 'package:safewalk/viewmodels/map_viewmodel.dart';
@@ -23,7 +24,7 @@ import 'package:safewalk/viewmodels/contacts_viewmodel.dart';
 import 'package:safewalk/viewmodels/settings_viewmodel.dart';
 import 'package:safewalk/viewmodels/tips_viewmodel.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Set the Mapbox access token before any MapView is created.
@@ -36,6 +37,7 @@ void main() {
   final apiService = ApiService(authService: authService);
   final pushService = PushNotificationService(apiService: apiService);
   final headphoneService = HeadphoneService();
+  final mapThemeService = MapThemeService();
 
   // Initialise Firebase (non-blocking – push won't work until configured).
   pushService.init();
@@ -43,10 +45,14 @@ void main() {
   // Start listening for headphone connection changes.
   headphoneService.init();
 
+  // Load persisted map theme preference before the first frame.
+  await mapThemeService.init();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<HeadphoneService>.value(value: headphoneService),
+        ChangeNotifierProvider<MapThemeService>.value(value: mapThemeService),
         ChangeNotifierProvider(
           create: (_) => LoginViewModel(
             apiService: apiService,
@@ -57,7 +63,10 @@ void main() {
           create: (_) => HomeViewModel(apiService: apiService),
         ),
         ChangeNotifierProvider(
-          create: (_) => MapViewModel(apiService: apiService),
+          create: (_) => MapViewModel(
+            apiService: apiService,
+            mapThemeService: mapThemeService,
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) => ContactsViewModel(apiService: apiService),
