@@ -1,6 +1,6 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, DeleteCommand, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import {
   CognitoIdentityProviderClient,
   AdminUpdateUserAttributesCommand,
@@ -38,12 +38,16 @@ interface PlatformSharingCodeResponse {
 
 interface PlatformTrustedContactPayload {
   requesterSafeWalkId: string;
-  sharingCode: string;
+  targetSafeWalkId: string;
+  locationSharing: boolean;
+  sosSharing: boolean;
 }
 
 interface PlatformConnectBackPayload {
   requesterSafeWalkId: string;
   targetSafeWalkId: string;
+  locationSharing: boolean;
+  sosSharing: boolean;
 }
 
 interface PlatformTrustedContactResponse {
@@ -594,28 +598,60 @@ async function handleConnectWithCode(
     return jsonResponse(400, { error: 'sharingCode ist erforderlich und muss eine Zeichenkette sein' });
   }
 
-  let safeWalkId: string;
+  // Look up the current user (B — the one entering the code)
+  let callerSafeWalkId: string;
   try {
     const result = await docClient.send(
       new GetCommand({ TableName: tableName, Key: { safeWalkAppId: userId } }),
     );
-
     if (!result.Item?.safeWalkId) {
       return jsonResponse(400, { error: 'Der Nutzer ist auf der Plattform noch nicht registriert' });
     }
-    safeWalkId = result.Item.safeWalkId as string;
+    callerSafeWalkId = result.Item.safeWalkId as string;
   } catch (error) {
-    console.error('Error retrieving user:', error);
+    console.error('Error retrieving caller user:', error);
     return jsonResponse(500, {
       error: 'Benutzerdaten konnten nicht abgerufen werden',
       details: error instanceof Error ? error.message : 'Unbekannter Fehler',
     });
   }
 
+  // Look up the code owner (A — whose code is being entered) via the SharingCodeIndex GSI
+  let codeOwnerSafeWalkId: string;
+  try {
+    const gsiResult = await docClient.send(
+      new QueryCommand({
+        TableName: tableName,
+        IndexName: 'SharingCodeIndex',
+        KeyConditionExpression: 'sharingCode = :code',
+        ExpressionAttributeValues: { ':code': requestBody.sharingCode },
+        Limit: 1,
+      }),
+    );
+    if (!gsiResult.Items || gsiResult.Items.length === 0 || !gsiResult.Items[0].safeWalkId) {
+      return jsonResponse(400, { error: 'Sharing-Code nicht gefunden oder abgelaufen' });
+    }
+    codeOwnerSafeWalkId = gsiResult.Items[0].safeWalkId as string;
+  } catch (error) {
+    console.error('Error resolving sharing code owner:', error);
+    return jsonResponse(500, {
+      error: 'Sharing-Code konnte nicht aufgeloest werden',
+      details: error instanceof Error ? error.message : 'Unbekannter Fehler',
+    });
+  }
+
+  if (codeOwnerSafeWalkId === callerSafeWalkId) {
+    return jsonResponse(400, { error: 'Du kannst dich nicht mit deinem eigenen Code verbinden' });
+  }
+
+  // A (code owner) is the requester/sharer, B (caller) is the target/watcher.
+  // Initially enable both location and SOS sharing so B receives A's data right away.
   const trustedContactsUrl = `${platformBaseDomain}/contacts`;
   const payload: PlatformTrustedContactPayload = {
-    requesterSafeWalkId: safeWalkId,
-    sharingCode: requestBody.sharingCode,
+    requesterSafeWalkId: codeOwnerSafeWalkId,
+    targetSafeWalkId: callerSafeWalkId,
+    locationSharing: true,
+    sosSharing: true,
   };
 
   try {
@@ -631,10 +667,10 @@ async function handleConnectWithCode(
       return jsonResponse(502, { error: 'Plattform hat die Registrierung der Vertrauensperson abgelehnt' });
     }
 
-    console.log('Successfully registered as trusted contact for user:', userId);
+    console.log('Successfully registered trusted contact for user:', userId);
     return jsonResponse(200, { message: 'Successfully connected as trusted contact' });
   } catch (error) {
-    console.error('Error registering as trusted contact:', error);
+    console.error('Error registering trusted contact:', error);
     return jsonResponse(502, {
       error: 'Registrierung als Vertrauensperson fehlgeschlagen',
       details: error instanceof Error ? error.message : 'Unbekannter Fehler',
@@ -690,6 +726,8 @@ async function handleConnectBack(
   const payload: PlatformConnectBackPayload = {
     requesterSafeWalkId: thisUserSafeWalkId,
     targetSafeWalkId: requestBody.peerSafeWalkId,
+    locationSharing: true,
+    sosSharing: true,
   };
 
   try {

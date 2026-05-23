@@ -368,7 +368,9 @@ function startPlatformServer(): Promise<number> {
             targetSafeWalkId = parsed.targetSafeWalkId;
           }
 
-          platformContacts.set(contactId, { contactId, requesterSafeWalkId, targetSafeWalkId, locationSharing: false, sosSharing: false, status: 'ACTIVE', platformId: 'e2e-platform', createdAt: now, updatedAt: now });
+          const locationSharing = parsed.locationSharing === true;
+          const sosSharing = parsed.sosSharing === true;
+          platformContacts.set(contactId, { contactId, requesterSafeWalkId, targetSafeWalkId, locationSharing, sosSharing, status: 'ACTIVE', platformId: 'e2e-platform', createdAt: now, updatedAt: now });
           return json(200, { success: true, data: { contactId } });
         }
 
