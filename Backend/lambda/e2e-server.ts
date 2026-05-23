@@ -357,11 +357,12 @@ function startPlatformServer(): Promise<number> {
           let targetSafeWalkId: string;
 
           if (parsed.sharingCode) {
-            // Connect via sharing code
+            // Connect via sharing code: code owner becomes requester (they share their data),
+            // the person entering the code becomes the trusted contact (target/receiver).
             const entry = platformSharingCodes.get(parsed.sharingCode);
             if (!entry) return json(404, { success: false, error: 'Sharing-Code nicht gefunden oder abgelaufen' });
-            requesterSafeWalkId = parsed.requesterSafeWalkId;
-            targetSafeWalkId = entry.safeWalkId;
+            requesterSafeWalkId = entry.safeWalkId;
+            targetSafeWalkId = parsed.requesterSafeWalkId;
           } else {
             requesterSafeWalkId = parsed.requesterSafeWalkId;
             targetSafeWalkId = parsed.targetSafeWalkId;

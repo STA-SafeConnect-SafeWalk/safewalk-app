@@ -688,8 +688,8 @@ async function handleConnectBack(
 
   const trustedContactsUrl = `${platformBaseDomain}/contacts`;
   const payload: PlatformConnectBackPayload = {
-    requesterSafeWalkId: requestBody.peerSafeWalkId,
-    targetSafeWalkId: thisUserSafeWalkId,
+    requesterSafeWalkId: thisUserSafeWalkId,
+    targetSafeWalkId: requestBody.peerSafeWalkId,
   };
 
   try {
