@@ -4,6 +4,7 @@ import {
   DeleteCommand,
   GetCommand,
   PutCommand,
+  QueryCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import {
@@ -304,6 +305,7 @@ describe('user-profile-handler', () => {
 
     it('returns 200 on successful connection', async () => {
       ddbMock.on(GetCommand).resolves({ Item: { safeWalkAppId: 'cognito-user-123', safeWalkId: 'sw-1' } });
+      ddbMock.on(QueryCommand).resolves({ Items: [{ safeWalkId: 'sw-peer' }] });
       setupHttpsMock(200, { success: true, data: {} });
 
       const res = await handler(makeEvent('POST /sharing-code/connect', 'cognito-user-123', { sharingCode: 'PEERCODE' }));
@@ -312,6 +314,7 @@ describe('user-profile-handler', () => {
 
     it('returns 502 when platform rejects', async () => {
       ddbMock.on(GetCommand).resolves({ Item: { safeWalkAppId: 'cognito-user-123', safeWalkId: 'sw-1' } });
+      ddbMock.on(QueryCommand).resolves({ Items: [{ safeWalkId: 'sw-peer' }] });
       setupHttpsMock(200, { success: false });
 
       const res = await handler(makeEvent('POST /sharing-code/connect', 'cognito-user-123', { sharingCode: 'BADCODE' }));

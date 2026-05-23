@@ -8,4 +8,5 @@ module.exports = {
   moduleNameMapper: {
     '^@aws-sdk/(.*)$': '<rootDir>/node_modules/@aws-sdk/$1',
   },
+  forceExit: true,
 };
